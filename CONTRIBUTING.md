@@ -24,8 +24,8 @@ update dependencies through Pixi and commit the resulting lock change.
 - Benchmark performance work with checked-in methodology; do not add unsupported
   superiority claims.
 
-## Public APIs
+## Public contracts
 
-Root-package exports are deliberate compatibility commitments. Keep internal
-implementation out of `src/yuragi/__init__.mojo` until its contract is
-documented and tested.
+Command-line flags, stdin/stdout behavior, exit codes, configuration, and shell
+integration are compatibility commitments. Keep internal modules private until
+a separately reusable contract is documented and tested.

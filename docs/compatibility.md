@@ -2,10 +2,15 @@
 
 ## Toolchain
 
-Development currently pins Mojo `1.0.0`. Precompiled `.mojoc` files are tied to
-the exact compiler version that produced them, so both the Pixi environment and
-Conda recipe pin the compiler. Compiler upgrades are explicit compatibility
-events and require the full locked test suite.
+Development currently pins Mojo `1.0.0`. The Pixi environment and Conda build
+recipe pin the compiler used to build the Yuragi executable. Compiler upgrades
+are explicit compatibility events and require the full locked test suite plus
+CLI and platform verification.
+
+The current native executable links Mojo's shared compiler runtime. The Conda
+package therefore carries a compiler-compatible `mojo-compiler` runtime
+dependency until Mojo provides a smaller redistributable runtime package or a
+supported fully static application build.
 
 ## Platforms
 

@@ -28,18 +28,19 @@ practical. Build-time data generation may use another language when justified,
 but generated outputs must be deterministic, checksum-pinned, licensed, and
 documented.
 
-## Package
+## Application package
 
-The Mojo import is `yuragi`. The eventual Conda distribution is
-`yuragi`. Source lives under `src/yuragi/`, whose
-`__init__.mojo` defines the package boundary.
+Yuragi installs an executable named `yuragi`. Its internal Mojo modules live
+under `src/yuragi/`; they are application implementation details rather than a
+separately supported library API. The Conda distribution is also named
+`yuragi`.
 
-The current scaffold includes only an internal smoke marker. Nothing is
-re-exported as a stable public API yet.
+The current executable only reports its experimental scaffold status. It does
+not yet implement candidate filtering or claim a released CLI contract.
 
 ## Repository map
 
-- `src/yuragi/`: library or application source
+- `src/yuragi/`: application source and executable entry point
 - `tests/`: TestSuite unit, reference-value, and invariant tests
 - `examples/`: small compilable usage programs
 - `benchmarks/`: reproducible methodology and later benchmark programs

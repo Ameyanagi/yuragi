@@ -11,7 +11,8 @@ source:
 build:
   number: 0
   script:
-    - mojo precompile src/yuragi -o ${{ PREFIX }}/lib/mojo/yuragi.mojoc
+    - mkdir -p ${{ PREFIX }}/bin
+    - mojo build --Werror -I src src/yuragi/main.mojo -o ${{ PREFIX }}/bin/yuragi
 
 requirements:
   build:
@@ -23,10 +24,7 @@ requirements:
 
 tests:
   - script:
-      - mojo run test_package.mojo
-    files:
-      recipe:
-        - test_package.mojo
+      - yuragi
 
 about:
   homepage: https://github.com/Ameyanagi/yuragi
