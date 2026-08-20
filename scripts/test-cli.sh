@@ -34,6 +34,18 @@ if ! .pixi/bin/yuragi --help | grep -q '^Usage: yuragi --filter QUERY'; then
 fi
 
 help_text="$(.pixi/bin/yuragi --help)"
+if ! grep -Fxq \
+  '      --lang LANGUAGE  phonetic language hint (default: auto)' \
+  <<<"$help_text"; then
+  echo "--lang help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  'Exit codes: 0 = success, 1 = no match (reserved), 2 = error.' \
+  <<<"$help_text"; then
+  echo "CLI help is missing the reserved no-match exit code" >&2
+  exit 1
+fi
 if [[ "$(.pixi/bin/yuragi --version --help)" != "$help_text" ]] || \
   [[ "$(.pixi/bin/yuragi --help --version)" != "$help_text" ]]; then
   echo "--help must win over --version regardless of their order" >&2
@@ -104,8 +116,8 @@ printf '\xff\n' | .pixi/bin/yuragi --filter '' \
   >"$test_dir/stdout" 2>"$test_dir/stderr"
 exit_code=$?
 set -e
-if [[ $exit_code -ne 1 ]]; then
-  echo "invalid UTF-8 input must exit 1 (got $exit_code)" >&2
+if [[ $exit_code -ne 2 ]]; then
+  echo "invalid UTF-8 input must exit 2 (got $exit_code)" >&2
   exit 1
 fi
 if [[ -s "$test_dir/stdout" ]]; then
@@ -125,8 +137,8 @@ set +e
   >"$test_dir/stdout" 2>"$test_dir/stderr"
 exit_code=$?
 set -e
-if [[ $exit_code -ne 1 ]]; then
-  echo "stdin read failure must exit 1 (got $exit_code)" >&2
+if [[ $exit_code -ne 2 ]]; then
+  echo "stdin read failure must exit 2 (got $exit_code)" >&2
   exit 1
 fi
 if [[ -s "$test_dir/stdout" ]]; then

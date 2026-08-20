@@ -88,12 +88,13 @@ def usage() -> String:
         "\n"
         "Options:\n"
         "  -f, --filter QUERY   select candidates for QUERY\n"
-        "      --lang LANGUAGE phonetic language hint (default: auto)\n"
+        "      --lang LANGUAGE  phonetic language hint (default: auto)\n"
         "  -h, --help           show this help\n"
         "      --version        show the version\n"
         "\n"
         "Invalid options exit before informational modes. If both --help and\n"
         "--version are validly supplied, --help wins.\n"
+        "Exit codes: 0 = success, 1 = no match (reserved), 2 = error.\n"
     )
 
 

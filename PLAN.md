@@ -34,9 +34,9 @@ a CR in an unterminated final record remains candidate data.
 - Render newline-delimited candidates deterministically.
 - Execute empty-query filtering as identity selection.
 - Reject non-empty filtering with exit code 2 and an explicit dependency-gate
-  diagnostic. Invalid usage and unsupported modes exit 2; input, operational,
-  and internal failures exit 1. No temporary substring or language logic is
-  hidden in Yuragi.
+  diagnostic. Invalid usage, unsupported modes, and input, operational, and
+  internal failures exit 2. Exit code 1 is reserved for no match. No temporary
+  substring or language logic is hidden in Yuragi.
 
 Evidence: unit tests, the `test-cli` executable contract test, `pixi run check`,
 and `pixi run build`.

@@ -53,11 +53,11 @@ def main():
         candidates = _read_standard_input()
     except error:
         print("yuragi: input error: ", error, sep="", file=stderr)
-        exit(1)
+        exit(2)
 
     try:
         var selected = select_without_matching(candidates^, options)
         print(render_candidates(selected^), end="")
     except error:
         print("yuragi: internal error: ", error, sep="", file=stderr)
-        exit(1)
+        exit(2)
