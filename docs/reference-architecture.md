@@ -150,8 +150,9 @@ position algorithms remain Hibana's responsibility.
   embedded servers, or remote control;
 - multi-selection, ANSI interpretation, field-expression transforms, history,
   popup/tmux orchestration, and shell-completion generation;
-- a public embeddable Yuragi library surface; and
-- SIMD, worker pools, cancellation threads, or incremental top-K before a
+- a public embeddable Yuragi library surface;
+- live candidate ingestion while the terminal is active; and
+- SIMD, worker pools, work-cancellation threads, or incremental top-K before a
   benchmark and the owning dependency contracts justify them.
 
 These are scope decisions, not claims that the reference features are poor.
@@ -170,10 +171,10 @@ mode controllers +------------------------------+
                  |                              |
                  v                              v
 application core                           effect ports
-  CandidateFramer / CandidateStore          input bytes
-  QueryPreparation / SearchSession          output bytes
+  CandidateFramer / CandidateSnapshot       input bytes
+  QueryPreparation / SearchEngine           output bytes
   RankingPolicy / LanguagePolicy            terminal events
-                 |                          clock/cancellation
+                 |                          clock/later work cancellation
                  v
 dependency adapters
   MojiAdapter  YomiAdapter  HibanaAdapter  MojoTUIAdapter (later)
@@ -188,25 +189,35 @@ Yuragi or implement its language, ranking, output, or process policy.
 
 ### Process boundary
 
-`main.mojo` owns argv conversion, help/version precedence, stdin/stdout/stderr,
-signal-to-status translation, and final exit. It parses and validates before
-reading stdin. It does not score candidates, infer a language, or render a
-widget.
+`main.mojo` owns argv conversion, help/version precedence, candidate stdin,
+stdout serialization, diagnostic policy, signal-to-status translation, and
+final exit. It parses and validates before reading stdin. It does not score
+candidates, infer a language, render a widget, or enter terminal modes. During
+interactive execution, it writes neither diagnostics nor output until the
+MojoTUI adapter has restored and released its terminal descriptors.
 
 ### Mode controllers
 
 `FilterController` runs one finite request to completion. It is the only v0.1
-controller. `InteractiveController` later applies events to session state and
-requests searches/renders; it must reuse the same preparation and ranking
-functions rather than duplicating them.
+controller. `InteractiveController` later applies events to application state
+and requests searches/renders. Both call the same pure `SearchEngine` over an
+immutable candidate snapshot; neither implements preparation, matching, or
+ranking itself.
 
 ### Application core
 
 The core owns candidate identity, preparation orchestration, the definition of
-one search request, deterministic cross-representation ranking, and the choice
-of output candidates. It is synchronous and deterministic first. Background
-execution is an adapter/effect concern added only when the state machine can
-reject stale results.
+one search input, deterministic cross-representation ranking, and the choice of
+output candidates. `SearchEngine.execute()` is pure: it receives an immutable
+candidate snapshot and returns an owned result without reading or mutating a
+shared store. It is synchronous and deterministic first. Background execution
+is an adapter/effect concern added only after the reducer can reject stale
+results.
+
+The interactive controller has one sequential reducer and one application
+state. That reducer alone increments the current generation and decides whether
+a completed search may replace visible results. The engine, executor, renderer,
+and MojoTUI adapter never apply a result to application state.
 
 ### Dependency adapters
 
@@ -218,7 +229,7 @@ alternate implementations:
 | Moji | original candidate/query text | safe text views, coordinates, transformed-to-source mappings | fuzzy scores, CJK readings, CLI policy |
 | Yomi | explicit `zh`, `ja`, or `ko` request plus Moji-compatible text | ordered phonetic representations with exact source mappings | `auto` detection, cross-view ranking, matching |
 | Hibana | prepared query and one searchable view | matched state, score, ordered positions/top-K result under a named scheme | language detection, phonetic conversion, output text |
-| MojoTUI | immutable render model and input/resize events | buffer updates and typed terminal events | candidates, matching, ranking, stdout, process exit |
+| MojoTUI | immutable render model and owned terminal configuration | typed terminal events; an outcome only after restoration | candidates, matching, ranking, accepted stdout, process exit |
 
 Release builds depend on pinned installable packages. They never reach into
 sibling source checkouts. Adapter contract tests should run against the same
@@ -320,17 +331,32 @@ Candidate
 PreparedCandidate
   candidate identity, ordered searchable views
 
-SearchRequest
-  generation, prepared query, language policy, optional result limit
+CandidateSnapshot
+  revision, immutable ordered prepared candidates, input_complete
+
+SearchInput
+  generation, immutable CandidateSnapshot, prepared query,
+  language/ranking policy, optional result limit
 
 CandidateMatch
   candidate identity, score, winning view, match positions/source ranges
 
 SearchSnapshot
-  generation, ordered matches, input_complete
+  generation, candidate revision, owned ordered matches, input_complete
 
-SearchSession
-  prepare candidates, execute one request, apply only current-generation result
+SearchEngine.execute(
+  SearchInput{generation, immutable candidate snapshot/revision,
+              prepared query, language/ranking policy, optional result limit}
+) -> owned SearchSnapshot
+  pure matching/ranking over prepared inputs; no shared state or result
+  application
+
+InteractiveState
+  current generation, CandidateSnapshot, query, visible SearchSnapshot,
+  selection and control flow
+
+reduce(InteractiveState, InteractiveEvent) -> state + requested effects
+  the sole authority that accepts a current-generation SearchSnapshot
 
 OutputEncoder
   write original candidates to a supplied byte sink under the selected framing
@@ -353,9 +379,8 @@ The finite filter path is:
 ```text
 parse/validate argv
   -> read and frame candidates
-  -> prepare direct/language views
-  -> execute Hibana matches
-  -> apply Yuragi total ordering
+  -> freeze one completed CandidateSnapshot
+  -> SearchEngine.execute(SearchInput)
   -> encode original candidates
   -> translate result/error to process status
 ```
@@ -363,46 +388,71 @@ parse/validate argv
 An empty query remains identity selection in source order. A non-empty query
 does not gain a placeholder substring fallback while dependencies are absent.
 The controller contains no terminal setup and is testable with supplied byte
-input and output/error sinks.
+input and output/error sinks. It invokes the same engine used by interactive
+mode, with one fixed generation and the completed immutable snapshot.
 
 ## Interactive controller
 
-Interactive mode adds state and effects around the same `SearchSession`:
+The first interactive slice reads and validates all candidates into the same
+completed immutable `CandidateSnapshot` used by filter mode before it opens the
+terminal. Live ingestion while a search or terminal session is active is a
+separate feature decision.
+
+Interactive mode adds one sequential state reducer and effects around the same
+`SearchEngine`:
 
 ```text
-candidate batch/input finished/input failed ----+
-query changed/key/resize/accept/cancel ----------+--> reduce event
-search finished(generation) ---------------------+        |
-                                                          v
-                                             state + requested effects
-                                             search / render / exit
+query changed/key/resize/accept/quit/interrupt ---+--> reduce event
+search completed(generation) / search failed -----+        |
+                                                           v
+                                              state + requested effects
+                                              search / render / finish
 ```
 
 The minimum typed event set is:
 
-- `CandidatesArrived(batch)`;
-- `InputFinished` and `InputFailed(error)`;
 - `QueryChanged(text)`;
-- `SearchFinished(generation, snapshot)` and `SearchFailed(generation, error)`;
-- `Key`, `Resize`, and later paste/mouse events as exposed by MojoTUI;
-- `Accept`, `Cancel`, and `Interrupted`.
+- `SearchCompleted(snapshot)` and
+  `SearchFailed(generation, candidate_revision, error)`;
+- `Key` and `Resize` as exposed by MojoTUI; and
+- `AcceptRequested`, `QuitRequested`, and `Interrupted`.
 
-Every query change or semantically relevant candidate update increments the
-search generation. Only a result whose generation equals the current state may
-replace visible results. Cancellation may save work, but generation checks are
-the correctness mechanism. A deterministic synchronous executor and fake
-event source come before background matching.
+Every query change increments the search generation. The reducer accepts a
+`SearchCompleted` snapshot only when both its generation and candidate revision
+equal the current state. A later executor may receive a generation-bound work
+cancellation token to save work, but cancellation never authorizes a result or
+provides correctness; the reducer's equality check does. `QuitRequested` is a
+user control-flow event, not a work-cancellation signal. A deterministic
+synchronous executor and fake event source come before background matching.
 
 MojoTUI renders a snapshot of application state and returns typed terminal
-events. It does not mutate the candidate store, call Hibana/Yomi, select shell
-commands, or write the accepted candidate to stdout.
+events. It does not mutate the candidate snapshot or application state, call
+Hibana/Yomi, select shell commands, or write the accepted candidate to stdout.
+
+### Interactive terminal ownership
+
+The `MojoTUIAdapter` and its interactive runtime exclusively own the
+`TerminalSession`, event source, backend, and controlling-terminal descriptors
+from entry through restoration. Frame patches remain inside that adapter. Every
+normal return, accepted selection, user quit, interrupt, or raised error closes
+the session before the runtime returns an owned `InteractiveOutcome` or
+propagates the error.
+
+`main.mojo` gives candidate stdin to the interactive controller, which freezes
+the snapshot before starting the runtime. While that runtime owns the terminal,
+`main.mojo` waits without writing to its descriptors. Only after restoration
+does `main.mojo` serialize an accepted original candidate to stdout or write a
+diagnostic, then choose the process status. The adapter never receives the
+accepted-output sink and never writes accepted data to stdout.
 
 ## Shell, output, and exit contracts
 
-- stdin is candidate data; terminal keystrokes later come from a controlling
-  terminal through the MojoTUI/backend boundary;
+- stdin is candidate data and is fully consumed before the first interactive
+  terminal session; terminal keystrokes later come from controlling-terminal
+  descriptors owned by the MojoTUI adapter;
 - stdout contains only encoded original candidate records;
-- stderr contains diagnostics and, later, terminal rendering;
+- stderr contains diagnostics and may be lent exclusively to the MojoTUI
+  adapter for terminal rendering while its session is active;
 - help and version use stdout and do not read stdin;
 - option errors are resolved before stdin is read;
 - filter output always ends each emitted candidate with the configured output
@@ -423,8 +473,8 @@ Yuragi's existing status 1 is operational failure, while a valid Unix filter
 that selects no records completed successfully. The CLI fixture must lock that
 decision before non-empty matching lands.
 
-Interactive mode may later reserve status 130 for user cancellation or an
-interrupt signal. That addition requires signal and terminal-cleanup tests and
+Interactive mode may later reserve status 130 for a user quit or interrupt
+signal. That addition requires signal and terminal-cleanup tests and
 must not change filter no-match behavior. A broken output pipe is an output
 failure under status 1; its diagnostic policy should be locked by a compiled
 CLI test against the behavior available in the pinned Mojo standard library.
@@ -446,9 +496,10 @@ candidate text, or interpolate a selected value into a command.
 - direct/phonetic score comparison and representation ties;
 - stable ordering for equal score under reordered worker completion;
 - exact discontiguous source ranges from winning representations;
-- stale-generation rejection and idempotent input-finished/error transitions;
+- immutable candidate-snapshot revisions and stale-generation rejection by the
+  sole application reducer;
 - output encoding into an in-memory byte sink; and
-- state-machine accept, cancel, resize, input failure, and search failure paths.
+- state-machine accept, quit, resize, interrupt, and search failure paths.
 
 Ranking tests need an independent small oracle that enumerates expected
 ordering keys; they must not reuse the production sort helper to calculate the
@@ -470,9 +521,11 @@ expected sequence.
   error, resized, and selected states;
 - a fake event source/sink with deterministic sequences;
 - stale search completion after a newer query;
-- candidates arriving while a search is in flight;
+- one preloaded candidate revision across all first-slice query generations;
+- optional work cancellation cannot make a stale result current;
 - accept emits exactly one original candidate after terminal restoration; and
-- cancel/input failure restores the terminal and emits no candidate.
+- quit, interrupt, and terminal failure restore the terminal and emit no
+  candidate.
 
 ### Benchmark methodology
 
@@ -512,10 +565,11 @@ exit criteria pass.
 | 7 | `YRA-007` implement and document Yuragi-owned `--lang auto` | YRA-006 | ASCII/CJK/mixed-script decision table and CLI/reference tests |
 | 8 | `YRA-008` close v0.1 noninteractive process/package contracts | YRA-007 | motivating `bjdx` fixture, error/output/status matrix, locked CI, clean package build |
 | 9 | `YRA-009` benchmark and decide bounded framer/store/top-K work | YRA-008 and stable Hibana lifetime/top-K API | reproducible stage benchmarks and an accept/reject design decision; no semantic drift |
-| 10 | `YRA-010` add the deterministic interactive state machine with fake effects | YRA-008 | generation/stale-result/event-transition tests; no terminal dependency yet |
-| 11 | `YRA-011` add MojoTUI as a pinned rendering/input adapter | MojoTUI gate, YRA-010 | TestBackend snapshots, resize/accept/cancel/cleanup tests, stdout remains clean |
+| 10 | `YRA-010` add the deterministic interactive state machine with fake effects over preloaded candidates | YRA-008 | pure-engine snapshot/revision fixtures; sole-reducer generation and stale-result tests; no terminal dependency yet |
+| 11 | `YRA-011` add MojoTUI as the session-owning rendering/input adapter | MojoTUI gate, YRA-010 | TestBackend snapshots; resize/accept/quit/interrupt tests; restoration precedes outcome and stdout remains clean |
 | 12 | `YRA-012` specify shell integrations and evaluate previews/configuration separately | YRA-011 | shell-specific byte/status fixtures and independently scoped accepted designs |
 
-Filesystem traversal, reload, remote control, multi-select, advanced actions,
-and native preview processes remain outside this issue sequence. Each requires
-its own product case after Yuragi proves the core ecosystem path.
+Live candidate ingestion during an interactive session, filesystem traversal,
+reload, remote control, multi-select, advanced actions, and native preview
+processes remain outside this issue sequence. Each requires its own product case
+after Yuragi proves the core ecosystem path.
