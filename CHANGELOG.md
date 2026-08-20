@@ -7,4 +7,14 @@ and uses semantic versioning after the first public release.
 
 ### Added
 
-- Initial experimental repository scaffold.
+- Validated `--filter`, `--lang`, `--help`, and `--version` option parsing.
+- Safe, chunked UTF-8 candidate ingestion from standard input.
+- Deterministic newline-delimited output and empty-query identity selection.
+- Explicit Moji, Hibana, and Yomi dependency gates for non-empty matching.
+- Unit and executable CLI contract tests for the first application slice.
+- Defined CRLF framing and help/version/invalid-option precedence at the
+  executable boundary.
+- Distinguished usage/unsupported-mode exit status 2 from operational/input
+  exit status 1, and made executable framing/package tests byte-exact.
+- Made `--lang auto` an application-owned policy and tightened Moji/Yomi
+  dependency gates around search coordinates and discontiguous source ranges.

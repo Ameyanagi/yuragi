@@ -1,0 +1,57 @@
+from std.collections import List
+from std.testing import TestSuite, assert_equal, assert_false, assert_true
+
+from yuragi.options import parse_options, usage, version_text
+
+
+def _assert_rejected(var args: List[String]) raises:
+    try:
+        _ = parse_options(args^)
+    except:
+        return
+    raise Error("expected command-line options to be rejected")
+
+
+def test_filter_and_language_options() raises:
+    var args: List[String] = ["yuragi", "--filter", "bjdx", "--lang=zh"]
+    var options = parse_options(args^)
+    assert_true(options.has_filter)
+    assert_equal(options.query, "bjdx")
+    assert_equal(options.language, "zh")
+    assert_true(options.has_language)
+    assert_false(options.help_requested)
+
+
+def test_short_empty_filter() raises:
+    var args: List[String] = ["yuragi", "-f", ""]
+    var options = parse_options(args^)
+    assert_true(options.has_filter)
+    assert_equal(options.query, "")
+    assert_equal(options.language, "auto")
+    assert_false(options.has_language)
+
+
+def test_help_and_version_text() raises:
+    var args: List[String] = ["yuragi", "--help", "--version"]
+    var options = parse_options(args^)
+    assert_true(options.help_requested)
+    assert_true(options.version_requested)
+    assert_true(usage().startswith("Usage: yuragi --filter QUERY"))
+    assert_equal(version_text(), "yuragi 0.0.0")
+
+
+def test_rejects_ambiguous_or_invalid_options() raises:
+    var duplicate: List[String] = ["yuragi", "-f", "a", "--filter=b"]
+    _assert_rejected(duplicate^)
+    var missing: List[String] = ["yuragi", "--filter"]
+    _assert_rejected(missing^)
+    var language: List[String] = ["yuragi", "--lang", "en"]
+    _assert_rejected(language^)
+    var duplicate_language: List[String] = ["yuragi", "--lang", "zh", "--lang=ko"]
+    _assert_rejected(duplicate_language^)
+    var positional: List[String] = ["yuragi", "candidate.txt"]
+    _assert_rejected(positional^)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -35,8 +35,18 @@ under `src/yuragi/`; they are application implementation details rather than a
 separately supported library API. The Conda distribution is also named
 `yuragi`.
 
-The current executable only reports its experimental scaffold status. It does
-not yet implement candidate filtering or claim a released CLI contract.
+The executable now implements the first noninteractive application boundary:
+validated options, UTF-8 stdin ingestion, stable candidate framing, and
+deterministic stdout. An empty query is an identity filter:
+
+```sh
+printf "北京大学\nnotes\n" | pixi run yuragi --filter ''
+```
+
+Non-empty queries deliberately fail with a clear diagnostic until the stable
+Moji, Hibana, and Yomi contracts are integrated. Yuragi does not ship a
+temporary substring matcher or duplicate CJK logic. See [PLAN.md](PLAN.md) for
+the dependency gates and exact v0.1 acceptance criteria.
 
 ## Repository map
 
@@ -46,6 +56,7 @@ not yet implement candidate filtering or claim a released CLI contract.
 - `benchmarks/`: reproducible methodology and later benchmark programs
 - `docs/`: architecture, design, compatibility, roadmap, and release policy
 - `conda.recipe/`: local Rattler build recipe
+- `PLAN.md`: dependency-gated implementation plan and acceptance evidence
 
 See [the architecture](docs/architecture.md), [design principles](docs/design.md),
 and [roadmap](docs/roadmap.md) before proposing a new dependency or feature.

@@ -1,1 +1,1 @@
-# Public exports will be added with the first implemented and tested API.
+"""Yuragi is an application and intentionally has no public library API."""

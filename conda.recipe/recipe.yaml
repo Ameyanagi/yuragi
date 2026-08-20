@@ -24,7 +24,13 @@ requirements:
 
 tests:
   - script:
-      - yuragi
+      - printf 'yuragi 0.0.0\n' > expected-version.txt
+      - yuragi --version > actual-version.txt
+      - cmp expected-version.txt actual-version.txt
+      - printf '北京大学\r\n\r\nnotes\r' > candidates.txt
+      - printf '北京大学\n\nnotes\r\n' > expected.txt
+      - yuragi --filter '' < candidates.txt > actual.txt
+      - cmp expected.txt actual.txt
 
 about:
   homepage: https://github.com/Ameyanagi/yuragi
