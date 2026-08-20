@@ -8,7 +8,7 @@ version = "0.0.0"
 [tasks]
 build = { cmd = "mkdir -p .pixi/bin && mojo build --Werror -I src src/yuragi/main.mojo -o .pixi/bin/yuragi", description = "Build the Yuragi executable with warnings as errors" }
 check = { depends-on = ["format-check", "test", "test-cli"], description = "Run the complete validation suite" }
-example = { cmd = "mojo run -I src examples/basic.mojo", description = "Run the structural smoke example" }
+example = { cmd = "mojo run --Werror -I src examples/basic.mojo", description = "Run the structural smoke example" }
 format = { cmd = "bash scripts/format.sh", description = "Format Mojo source files" }
 format-check = { cmd = "bash scripts/check-format.sh", description = "Verify Mojo formatting without modifying source" }
 package = { cmd = "rattler-build build --recipe conda.recipe/recipe.yaml -c conda-forge -c https://conda.modular.com/max -c https://repo.prefix.dev/modular-community", description = "Build the local Conda package" }
