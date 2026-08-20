@@ -58,8 +58,10 @@ the dependency gates and exact v0.1 acceptance criteria.
 - `conda.recipe/`: local Rattler build recipe
 - `PLAN.md`: dependency-gated implementation plan and acceptance evidence
 
-See [the architecture](docs/architecture.md), [design principles](docs/design.md),
-and [roadmap](docs/roadmap.md) before proposing a new dependency or feature.
+See [the architecture](docs/architecture.md),
+[finder reference architecture](docs/reference-architecture.md),
+[design principles](docs/design.md), and [roadmap](docs/roadmap.md) before
+proposing a new dependency or feature.
 
 ## License
 

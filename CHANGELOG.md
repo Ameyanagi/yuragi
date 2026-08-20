@@ -21,3 +21,6 @@ and uses semantic versioning after the first public release.
 - Added deterministic controlled-chunk and byte-exact executable fixtures for
   a multibyte CJK scalar straddling the nominal 4 KiB buffer layout, without
   assuming that operating-system reads fill the requested span.
+- Added a primary-source finder reference architecture covering the shared
+  search core, filter/interactive controllers, dependency adapters, streaming
+  constraints, ranking/language ownership, process contracts, and issue order.

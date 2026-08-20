@@ -40,6 +40,11 @@ placeholder algorithm from becoming an accidental compatibility contract.
 dependency is added. Dependencies must be pinned installable packages; release
 builds do not reach into sibling source checkouts.
 
+`docs/reference-architecture.md` derives the target filter/interactive split,
+streaming rules, dependency adapters, ranking and language ownership, process
+contracts, verification matrix, and dependency-ordered issues from pinned
+primary finder sources.
+
 Yuragi does not export a supported library surface. Its modules remain
 application-internal; reusable algorithms, generated tables, platform details,
 and backend implementations stay in their owning libraries. Generic
