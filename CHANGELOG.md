@@ -18,3 +18,5 @@ and uses semantic versioning after the first public release.
   exit status 1, and made executable framing/package tests byte-exact.
 - Made `--lang auto` an application-owned policy and tightened Moji/Yomi
   dependency gates around search coordinates and discontiguous source ranges.
+- Added a byte-exact executable fixture for a multibyte CJK scalar split across
+  the 4 KiB stdin read boundary followed by additional records.

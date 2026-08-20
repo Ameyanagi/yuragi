@@ -27,7 +27,8 @@ a CR in an unterminated final record remains candidate data.
 - Parse `--filter`, `--lang`, `--help`, and `--version` without accepting
   ambiguous positionals or duplicate filter/language selections.
 - Read piped stdin through the public `FileDescriptor.read_bytes()` API and
-  validate UTF-8 at the effect boundary.
+  validate UTF-8 at the effect boundary after byte aggregation, including when
+  one UTF-8 scalar crosses the 4 KiB read boundary.
 - Preserve Unicode candidate text, blank candidates, and source order.
 - Render newline-delimited candidates deterministically.
 - Execute empty-query filtering as identity selection.
