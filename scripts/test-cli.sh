@@ -117,3 +117,24 @@ if ! grep -Fq 'yuragi: input error:' "$test_dir/stderr" || \
   echo "invalid UTF-8 input did not produce a useful diagnostic" >&2
   exit 1
 fi
+
+# Bash's `<&-` closes descriptor 0 for the child and forces `read_bytes()` to
+# take the application's operational input-error path.
+set +e
+.pixi/bin/yuragi --filter '' <&- \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 1 ]]; then
+  echo "stdin read failure must exit 1 (got $exit_code)" >&2
+  exit 1
+fi
+if [[ -s "$test_dir/stdout" ]]; then
+  echo "stdin read failure produced candidate output" >&2
+  exit 1
+fi
+if ! grep -Fq 'yuragi: input error:' "$test_dir/stderr" || \
+  ! grep -Fq 'read bytes' "$test_dir/stderr"; then
+  echo "stdin read failure did not produce a useful diagnostic" >&2
+  exit 1
+fi
