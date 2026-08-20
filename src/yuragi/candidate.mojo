@@ -14,6 +14,25 @@ struct Candidate(Copyable):
         self.text = text^
 
 
+struct CandidateInputBuffer(Copyable):
+    """Accumulate arbitrary byte chunks before validating UTF-8 once."""
+
+    var _bytes: List[UInt8]
+
+    def __init__(out self):
+        self._bytes = List[UInt8]()
+
+    def append_chunk(mut self, chunk: Span[UInt8, ...]):
+        """Append one input chunk without interpreting partial UTF-8."""
+        for index in range(len(chunk)):
+            self._bytes.append(chunk[index])
+
+    def candidates(self) raises -> List[Candidate]:
+        """Validate the complete byte stream and split it into candidates."""
+        var text = String(from_utf8=self._bytes[:])
+        return candidates_from_text(text)
+
+
 def candidates_from_text(text: StringSlice) -> List[Candidate]:
     """Split LF/CRLF input without inventing a trailing candidate."""
     var candidates = List[Candidate]()

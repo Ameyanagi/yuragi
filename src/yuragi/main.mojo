@@ -1,23 +1,22 @@
 from std.collections import List
 from std.sys import argv, exit, stderr, stdin
 
-from yuragi.candidate import Candidate, candidates_from_text, render_candidates
+from yuragi.candidate import Candidate, CandidateInputBuffer, render_candidates
 from yuragi.options import Options, parse_options, usage, version_text
 from yuragi.pipeline import select_without_matching, validate_foundation_mode
 
 
 def _read_standard_input() raises -> List[Candidate]:
     """Read standard input once through the public descriptor API as UTF-8."""
-    var bytes = List[UInt8]()
+    var input = CandidateInputBuffer()
     var buffer = List[UInt8](length=4096, fill=0)
     var stream = stdin
     while True:
         var count = stream.read_bytes(buffer[:])
         if count == 0:
             break
-        bytes.extend(buffer[:count])
-    var text = String(from_utf8=bytes[:])
-    return candidates_from_text(text)
+        input.append_chunk(buffer[:count])
+    return input.candidates()
 
 
 def _argv_strings() -> List[String]:

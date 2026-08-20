@@ -13,8 +13,9 @@ if ! cmp -s "$test_dir/expected" "$test_dir/actual"; then
   exit 1
 fi
 
-# Place the first byte of a three-byte UTF-8 scalar at the end of the 4 KiB
-# read buffer. Decoding must happen after byte aggregation, not per read.
+# Place the first byte of a three-byte UTF-8 scalar at the nominal 4 KiB
+# buffer boundary for compiled CLI coverage. The unit test forces the exact
+# chunk split; this fixture does not assume that OS reads fill the buffer.
 printf -v padding '%*s' 4095 ''
 padding="${padding// /a}"
 printf '%s界\r\nsecond\n' "$padding" >"$test_dir/chunk-input"
@@ -23,7 +24,7 @@ printf '%s界\nsecond\n' "$padding" >"$test_dir/chunk-expected"
   <"$test_dir/chunk-input" >"$test_dir/chunk-actual" \
   2>"$test_dir/chunk-stderr"
 if ! cmp -s "$test_dir/chunk-expected" "$test_dir/chunk-actual"; then
-  echo "chunked stdin corrupted split UTF-8 or subsequent records" >&2
+  echo "boundary-layout stdin corrupted UTF-8 or subsequent records" >&2
   exit 1
 fi
 
