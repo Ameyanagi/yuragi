@@ -1,12 +1,17 @@
 from std.collections import List
 from std.sys import argv, exit, stderr, stdin
 
-from yuragi.candidate import Candidate, CandidateInputBuffer, render_candidates
+from yuragi.candidate import (
+    Candidate,
+    CandidateInputBuffer,
+    RecordFraming,
+    render_candidates,
+)
 from yuragi.options import Options, parse_options, usage, version_text
 from yuragi.pipeline import matching_backend_required, select, validate_foundation_mode
 
 
-def _read_standard_input() raises -> List[Candidate]:
+def _read_standard_input(framing: RecordFraming) raises -> List[Candidate]:
     """Read standard input once through the public descriptor API as UTF-8."""
     var input = CandidateInputBuffer()
     var buffer = List[UInt8](length=4096, fill=0)
@@ -16,7 +21,7 @@ def _read_standard_input() raises -> List[Candidate]:
         if count == 0:
             break
         input.append_chunk(buffer[:count])
-    return input.candidates()
+    return input.candidates(framing)
 
 
 def _argv_strings() -> List[String]:
@@ -50,7 +55,8 @@ def main():
 
     var candidates = List[Candidate]()
     try:
-        candidates = _read_standard_input()
+        var input_framing = RecordFraming.NUL if options.read0 else RecordFraming.LINES
+        candidates = _read_standard_input(input_framing)
     except error:
         print("yuragi: input error: ", error, sep="", file=stderr)
         exit(2)
@@ -59,7 +65,10 @@ def main():
         var selected = select(candidates^, options)
         if matching_backend_required(options) and len(selected) == 0:
             exit(1)
-        print(render_candidates(selected^), end="")
+        var output_framing = (
+            RecordFraming.NUL if options.print0 else RecordFraming.LINES
+        )
+        print(render_candidates(selected^, output_framing), end="")
     except error:
         print("yuragi: internal error: ", error, sep="", file=stderr)
         exit(2)

@@ -3,6 +3,21 @@
 from std.collections import List
 
 
+struct RecordFraming(Copyable, Equatable, ImplicitlyCopyable):
+    """Nominal delimiter policy for candidate records."""
+
+    var _value: Int
+
+    comptime LINES = RecordFraming(_value=0)
+    comptime NUL = RecordFraming(_value=1)
+
+    def __init__(out self, *, _value: Int):
+        self._value = _value
+
+    def __eq__(self, other: Self) -> Bool:
+        return self._value == other._value
+
+
 struct Candidate(Copyable):
     """One candidate and its stable position in the input stream."""
 
@@ -22,14 +37,18 @@ struct CandidateInputBuffer(Copyable):
     def __init__(out self):
         self._bytes = List[UInt8]()
 
-    def append_chunk(mut self, chunk: Span[UInt8, ...]):
+    def append_chunk(mut self, chunk: Span[UInt8, _]):
         """Append one input chunk without interpreting partial UTF-8."""
         for index in range(len(chunk)):
             self._bytes.append(chunk[index])
 
-    def candidates(self) raises -> List[Candidate]:
+    def candidates(
+        self, framing: RecordFraming = RecordFraming.LINES
+    ) raises -> List[Candidate]:
         """Validate the complete byte stream and split it into candidates."""
         var text = String(from_utf8=self._bytes[:])
+        if framing == RecordFraming.NUL:
+            return candidates_from_nul_text(text)
         return candidates_from_text(text)
 
 
@@ -48,10 +67,27 @@ def candidates_from_text(text: StringSlice) -> List[Candidate]:
     return candidates^
 
 
-def render_candidates(candidates: List[Candidate]) -> String:
-    """Render candidates as newline-delimited output in their supplied order."""
+def candidates_from_nul_text(text: StringSlice) -> List[Candidate]:
+    """Split NUL-delimited input without interpreting CR or LF as framing."""
+    var candidates = List[Candidate]()
+    var records = text.split("\x00")
+    var record_count = len(records)
+    if record_count > 0 and records[record_count - 1] == "":
+        record_count -= 1
+    for index in range(record_count):
+        candidates.append(Candidate(index, String(records[index])))
+    return candidates^
+
+
+def render_candidates(
+    candidates: List[Candidate], framing: RecordFraming = RecordFraming.LINES
+) -> String:
+    """Render candidates with the selected terminator in supplied order."""
     var output = String()
     for index in range(len(candidates)):
         output += candidates[index].text
-        output += "\n"
+        if framing == RecordFraming.NUL:
+            output += "\x00"
+        else:
+            output += "\n"
     return output

@@ -60,6 +60,10 @@ phonetic language matching still awaits Yomi; Yuragi does not duplicate CJK
 logic. See [PLAN.md](PLAN.md) for the remaining dependency gates and exact v0.1
 acceptance criteria.
 
+Use `--read0` and `--print0` for NUL framing when filenames can contain
+newlines. Smart case is the default; `--ignore-case` and `--no-ignore-case`
+provide hard ASCII case-sensitivity overrides.
+
 ## Repository map
 
 - `src/yuragi/`: application source and executable entry point

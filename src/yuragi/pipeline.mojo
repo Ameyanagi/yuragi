@@ -1,6 +1,6 @@
 """Application orchestration boundaries for noninteractive filtering."""
 
-from hibana import CaseMode, Matcher, Scheme
+from hibana import Matcher, Scheme
 from std.collections import List
 
 from yuragi.candidate import Candidate
@@ -38,7 +38,7 @@ def select_ranked(
     """Match and boundedly rank candidates with one prepared matcher."""
     var matcher = Matcher(
         options.query,
-        case_mode=CaseMode.SMART_ASCII,
+        case_mode=options.case_mode,
         scheme=Scheme.DEFAULT,
     )
     var k = options.limit if options.has_limit else len(candidates)

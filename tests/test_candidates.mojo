@@ -1,8 +1,16 @@
 from std.collections import List
-from std.testing import TestSuite, assert_equal, assert_raises
+from std.testing import (
+    TestSuite,
+    assert_equal,
+    assert_false,
+    assert_raises,
+    assert_true,
+)
 
 from yuragi.candidate import (
     CandidateInputBuffer,
+    RecordFraming,
+    candidates_from_nul_text,
     candidates_from_text,
     render_candidates,
 )
@@ -88,6 +96,64 @@ def test_utf8_is_decoded_only_after_controlled_chunks_are_aggregated() raises:
 def test_render_is_newline_delimited() raises:
     var candidates = candidates_from_text("北京大学\nnotes")
     assert_equal(render_candidates(candidates^), "北京大学\nnotes\n")
+
+
+def test_nul_framing_preserves_newlines_and_carriage_returns() raises:
+    var candidates = candidates_from_nul_text("a\nb\r\x00c\r\nd")
+    assert_equal(len(candidates), 2)
+    assert_equal(candidates[0].text, "a\nb\r")
+    assert_equal(candidates[1].text, "c\r\nd")
+
+
+def test_nul_framing_ignores_only_a_trailing_delimiter() raises:
+    var terminated = candidates_from_nul_text("one\x00two\x00")
+    assert_equal(len(terminated), 2)
+    assert_equal(terminated[0].text, "one")
+    assert_equal(terminated[1].text, "two")
+
+    var unterminated = candidates_from_nul_text("one\x00two")
+    assert_equal(len(unterminated), 2)
+    assert_equal(unterminated[1].text, "two")
+
+
+def test_nul_framing_preserves_blank_records() raises:
+    var candidates = candidates_from_nul_text("\x00\x00last\x00")
+    assert_equal(len(candidates), 3)
+    assert_equal(candidates[0].text, "")
+    assert_equal(candidates[1].text, "")
+    assert_equal(candidates[2].text, "last")
+
+
+def test_input_buffer_dispatches_to_nul_framing() raises:
+    var bytes = List[UInt8]()
+    bytes.append(UInt8(ord("a")))
+    bytes.append(UInt8(ord("\n")))
+    bytes.append(UInt8(ord("b")))
+    bytes.append(UInt8(0))
+
+    var input = CandidateInputBuffer()
+    input.append_chunk(bytes[:])
+    var candidates = input.candidates(RecordFraming.NUL)
+    assert_equal(len(candidates), 1)
+    assert_equal(candidates[0].text, "a\nb")
+
+
+def test_render_nul_round_trips_candidate_texts() raises:
+    var candidates = candidates_from_nul_text("a\nb\x00\x00c")
+    var rendered = render_candidates(candidates.copy(), RecordFraming.NUL)
+    assert_equal(rendered, "a\nb\x00\x00c\x00")
+
+    var round_tripped = candidates_from_nul_text(rendered)
+    assert_equal(len(round_tripped), len(candidates))
+    for index in range(len(candidates)):
+        assert_equal(round_tripped[index].source_index, candidates[index].source_index)
+        assert_equal(round_tripped[index].text, candidates[index].text)
+
+
+def test_record_framing_equality() raises:
+    assert_true(RecordFraming.LINES == RecordFraming.LINES)
+    assert_true(RecordFraming.NUL == RecordFraming.NUL)
+    assert_false(RecordFraming.LINES == RecordFraming.NUL)
 
 
 def main() raises:

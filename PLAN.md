@@ -17,22 +17,26 @@ The first product contract is a Unix filter:
 printf "北京大学\nnotes\n" | yuragi --lang zh --filter bjdx
 ```
 
-Input and output are newline-delimited UTF-8. A successful invocation writes
-only candidates, one per line, to stdout. Diagnostics go to stderr. Equal-score
-results preserve source order. CR is removed only as the CRLF delimiter prefix;
-a CR in an unterminated final record remains candidate data.
+Input and output are newline-delimited UTF-8; `--read0` and `--print0` switch
+either side independently to NUL framing while the complete stream is still
+validated as UTF-8. A successful invocation writes only candidates to stdout.
+Diagnostics go to stderr. Equal-score results preserve source order. CR is
+removed only as the CRLF delimiter prefix; a CR in an unterminated final record
+remains candidate data.
 
 ## Current foundation — implemented
 
-- Parse `--filter`, `--limit`, `--lang`, `--help`, and `--version` without
-  accepting ambiguous positionals or duplicate filter/language/limit
-  selections.
+- Parse `--filter`, `--limit`, `--lang`, `--read0`, `--print0`, `--help`, and
+  `--version` without accepting ambiguous positionals or duplicate selections.
+- Use Hibana smart ASCII case matching by default. `--ignore-case` and
+  `--no-ignore-case` are hard overrides that map directly to Hibana
+  `CaseMode.IGNORE_ASCII` and `CaseMode.EXACT`.
 - Read piped stdin through the public `FileDescriptor.read_bytes()` API and
   validate UTF-8 at the effect boundary after byte aggregation. A controlled
   unit test forces one UTF-8 scalar across a chunk boundary; the compiled CLI
   fixture covers the nominal 4 KiB buffer layout without assuming full reads.
 - Preserve Unicode candidate text, blank candidates, and source order.
-- Render newline-delimited candidates deterministically.
+- Render newline- or NUL-delimited candidates deterministically.
 - Execute empty-query filtering as identity selection, with optional
   input-order truncation through `--limit`.
 - Rank non-empty direct matches through the installed Hibana package with a

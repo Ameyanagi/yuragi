@@ -89,5 +89,40 @@ def test_no_match_returns_empty_selection() raises:
     assert_equal(len(selected), 0)
 
 
+def test_ignore_case_override_matches_uppercase_query_to_lowercase_text() raises:
+    var args: List[String] = [
+        "yuragi",
+        "--filter",
+        "RE",
+        "--ignore-case",
+    ]
+    var options = parse_options(args^)
+    var candidates = candidates_from_text("read\n")
+    var selected = select(candidates^, options)
+
+    assert_equal(len(selected), 1)
+    assert_equal(selected[0].text, "read")
+
+
+def test_smart_case_uppercase_query_matches_case_sensitively() raises:
+    var args: List[String] = ["yuragi", "--filter", "RE"]
+    var options = parse_options(args^)
+    var candidates = candidates_from_text("read\nREadme\n")
+    var selected = select(candidates^, options)
+
+    assert_equal(len(selected), 1)
+    assert_equal(selected[0].text, "REadme")
+
+
+def test_smart_case_lowercase_query_ignores_ascii_case() raises:
+    var args: List[String] = ["yuragi", "--filter", "re"]
+    var options = parse_options(args^)
+    var candidates = candidates_from_text("README\n")
+    var selected = select(candidates^, options)
+
+    assert_equal(len(selected), 1)
+    assert_equal(selected[0].text, "README")
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

@@ -13,6 +13,33 @@ if ! cmp -s "$test_dir/expected" "$test_dir/actual"; then
   exit 1
 fi
 
+printf 'a\nb\0c\0' >"$test_dir/nul-round-trip-input"
+printf 'a\nb\0c\0' >"$test_dir/nul-round-trip-expected"
+.pixi/bin/yuragi --read0 --print0 --filter '' \
+  <"$test_dir/nul-round-trip-input" >"$test_dir/nul-round-trip-actual" \
+  2>"$test_dir/nul-round-trip-stderr"
+if ! cmp -s \
+  "$test_dir/nul-round-trip-expected" "$test_dir/nul-round-trip-actual"; then
+  echo "NUL framing did not preserve a newline inside a candidate" >&2
+  exit 1
+fi
+
+printf 'banana\0' >"$test_dir/print0-expected"
+printf 'apple\nbanana\n' | .pixi/bin/yuragi --filter ba --print0 \
+  >"$test_dir/print0-actual" 2>"$test_dir/print0-stderr"
+if ! cmp -s "$test_dir/print0-expected" "$test_dir/print0-actual"; then
+  echo "--print0 did not NUL-terminate ranked output" >&2
+  exit 1
+fi
+
+printf 'banana\n' >"$test_dir/read0-expected"
+printf 'banana\0apple\0' | .pixi/bin/yuragi --read0 --filter ba \
+  >"$test_dir/read0-actual" 2>"$test_dir/read0-stderr"
+if ! cmp -s "$test_dir/read0-expected" "$test_dir/read0-actual"; then
+  echo "--read0 did not parse NUL-delimited input independently of output" >&2
+  exit 1
+fi
+
 # Place the first byte of a three-byte UTF-8 scalar at the nominal 4 KiB
 # buffer boundary for compiled CLI coverage. The unit test forces the exact
 # chunk split; this fixture does not assume that OS reads fill the buffer.
@@ -29,22 +56,46 @@ if ! cmp -s "$test_dir/chunk-expected" "$test_dir/chunk-actual"; then
 fi
 
 if ! .pixi/bin/yuragi --help | grep -Fxq \
-  'Usage: yuragi --filter QUERY [--limit N] [--lang auto|zh|ja|ko]'; then
+  'Usage: yuragi --filter QUERY [--limit N] [--lang auto|zh|ja|ko] [options]'; then
   echo "CLI help is missing the usage contract" >&2
   exit 1
 fi
 
 help_text="$(.pixi/bin/yuragi --help)"
 if ! grep -Fxq \
-  '      --lang LANGUAGE  phonetic language hint (default: auto)' \
+  '      --lang LANGUAGE   phonetic language hint (default: auto)' \
   <<<"$help_text"; then
   echo "--lang help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
-  '      --limit N        emit at most N best-ranked candidates' \
+  '      --limit N         emit at most N best-ranked candidates' \
   <<<"$help_text"; then
   echo "--limit help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '  -i, --ignore-case     match case-insensitively (ASCII)' \
+  <<<"$help_text"; then
+  echo "--ignore-case help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '      --no-ignore-case  match case-sensitively' \
+  <<<"$help_text"; then
+  echo "--no-ignore-case help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '      --read0           read NUL-delimited candidates from standard input' \
+  <<<"$help_text"; then
+  echo "--read0 help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '      --print0          write NUL-delimited candidates to standard output' \
+  <<<"$help_text"; then
+  echo "--print0 help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
@@ -85,11 +136,48 @@ if [[ $exit_code -ne 2 ]] || \
   exit 1
 fi
 
+set +e
+.pixi/bin/yuragi --filter x --ignore-case --no-ignore-case \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: case sensitivity may be specified only once' \
+    "$test_dir/stderr"; then
+  echo "conflicting case flags must produce their exact diagnostic" >&2
+  exit 1
+fi
+
 printf 'banana\nbar\n' >"$test_dir/ranked-expected"
 printf 'apple\nbanana\nbar\n' | .pixi/bin/yuragi --filter ba \
   >"$test_dir/ranked-actual" 2>"$test_dir/ranked-stderr"
 if ! cmp -s "$test_dir/ranked-expected" "$test_dir/ranked-actual"; then
   echo "ranked filtering produced unexpected candidates or ordering" >&2
+  exit 1
+fi
+
+printf 'READ\n' >"$test_dir/smart-case-expected"
+printf 'READ\nread\n' | .pixi/bin/yuragi --filter RE \
+  >"$test_dir/smart-case-actual" 2>"$test_dir/smart-case-stderr"
+if ! cmp -s "$test_dir/smart-case-expected" "$test_dir/smart-case-actual"; then
+  echo "smart case did not make an uppercase query case-sensitive" >&2
+  exit 1
+fi
+
+printf 'READ\nread\n' >"$test_dir/ignore-case-expected"
+printf 'READ\nread\n' | .pixi/bin/yuragi --filter RE --ignore-case \
+  >"$test_dir/ignore-case-actual" 2>"$test_dir/ignore-case-stderr"
+if ! cmp -s "$test_dir/ignore-case-expected" "$test_dir/ignore-case-actual"; then
+  echo "--ignore-case did not apply ASCII-insensitive matching" >&2
+  exit 1
+fi
+
+printf 'read\n' >"$test_dir/exact-case-expected"
+printf 'READ\nread\n' | .pixi/bin/yuragi --filter re --no-ignore-case \
+  >"$test_dir/exact-case-actual" 2>"$test_dir/exact-case-stderr"
+if ! cmp -s "$test_dir/exact-case-expected" "$test_dir/exact-case-actual"; then
+  echo "--no-ignore-case did not apply exact-case matching" >&2
   exit 1
 fi
 
