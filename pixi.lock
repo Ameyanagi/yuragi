@@ -20,9 +20,7 @@ platforms:
 environments:
   default:
     channels:
-    - url: file:///Users/ryuichi/dev/hibana/output/
-    - url: file:///Users/ryuichi/dev/mojotui/output/
-    - url: file:///Users/ryuichi/dev/moji/output/
+    - url: https://ameyanagi.github.io/mojo-channel/
     - url: https://conda.modular.com/max/
     - url: https://conda.anaconda.org/conda-forge/
     packages:
@@ -133,9 +131,9 @@ environments:
       - conda: https://conda.modular.com/max/noarch/mblack-26.5.0-release.conda
       - conda: https://conda.modular.com/max/noarch/mojo-python-1.0.0-release.conda
       osx-arm64:
-      - conda: /Users/ryuichi/dev/hibana/output/osx-arm64/mojo-hibana-0.0.0-h60d57d3_0.conda
-      - conda: /Users/ryuichi/dev/moji/output/osx-arm64/mojo-moji-0.0.0-h60d57d3_0.conda
-      - conda: /Users/ryuichi/dev/mojotui/output/osx-arm64/mojo-mojotui-0.1.0-h60d57d3_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-hibana-0.0.0-h60d57d3_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-moji-0.0.0-h60d57d3_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-mojotui-0.1.0-h60d57d3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/click-8.4.2-pyhc90fa1f_0.conda
@@ -182,34 +180,28 @@ environments:
       - conda: https://conda.modular.com/max/osx-arm64/mojo-1.0.0-release.conda
       - conda: https://conda.modular.com/max/osx-arm64/mojo-compiler-1.0.0-release.conda
 packages:
-- conda: /Users/ryuichi/dev/hibana/output/osx-arm64/mojo-hibana-0.0.0-h60d57d3_0.conda
-  subdir: osx-arm64
-  sha256: 409a1f0d2a6c375d9f1112de87beb34bf2943c353bb3391ad53509fdcd5ff98a
-  md5: f7231c4e650a71fb366b44959f1d342b
+- conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-hibana-0.0.0-h60d57d3_0.conda
+  sha256: 3fd6cc9a7bfaa286f5511d3725af5cdf0acfec6924f4abd63c1bee0e3683019a
+  md5: 6e2c1939665465019f1832a22aa3f567
   depends:
   - mojo-compiler >=1.0.0,<2.0a0
-  channel: file:///Users/ryuichi/dev/hibana/output
   license: MIT OR Apache-2.0
-  size: 63201
-  timestamp: 1787220504450
-- conda: /Users/ryuichi/dev/moji/output/osx-arm64/mojo-moji-0.0.0-h60d57d3_0.conda
-  subdir: osx-arm64
-  sha256: 7f27858e0125bd92c768b416e137ce6900c853b6c21c710d54743b80de0991c1
-  md5: 0868d961856f560e233624fa1fc2395b
+  size: 103392
+  timestamp: 1787271347024
+- conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-moji-0.0.0-h60d57d3_0.conda
+  sha256: f58e29eb2383ebbbbd54d299d1129a442ec21b5b5cafb6462b999cafa77d2fa4
+  md5: 027d427ed0534f2916cbd6478e416d56
   depends:
   - mojo-compiler >=1.0.0,<2.0a0
-  channel: file:///Users/ryuichi/dev/moji/output
   license: MIT OR Apache-2.0
-  size: 49893
-  timestamp: 1787220258858
-- conda: /Users/ryuichi/dev/mojotui/output/osx-arm64/mojo-mojotui-0.1.0-h60d57d3_0.conda
-  subdir: osx-arm64
+  size: 218425
+  timestamp: 1787271511392
+- conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-mojotui-0.1.0-h60d57d3_0.conda
   sha256: 2a28eca11ffedd6cc1c1ff48e61f57cc8cc169308141b4d3bc91baf7be18cb47
   md5: 65abe1366d0afee9fed4f631e51aaabb
   depends:
   - mojo-compiler >=1.0.0,<2.0a0
   - mojo-moji
-  channel: file:///Users/ryuichi/dev/mojotui/output
   license: MIT OR Apache-2.0
   size: 819742
   timestamp: 1787277915536
