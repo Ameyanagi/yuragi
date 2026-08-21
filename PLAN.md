@@ -7,7 +7,7 @@ required to cross each gate.
 ## Product boundary
 
 Yuragi owns CLI policy, candidate ingestion, ranking policy, output, shell
-integration, configuration, and—later—the interactive application. It does not
+integration, configuration, and the interactive application. It does not
 own Unicode segmentation, transformed-to-source mappings, fuzzy scoring, CJK
 phonetic conversion, or terminal widgets.
 
@@ -42,12 +42,15 @@ remains candidate data.
 - Rank non-empty direct matches through the installed Hibana package with a
   bounded top-K path. The documented ordering is score descending, then input
   order.
+- Run the default no-`--filter` mode as a fixed-height inline MojoTUI picker
+  behind `src/yuragi/interactive.mojo`. It reuses the Hibana ranking pipeline,
+  keeps cursor identity by candidate source index across query refinements, and
+  writes terminal UI through `/dev/tty` rather than stdout.
 - Exit with code 1 and empty stdout when a non-empty query has no match.
   Invalid usage, unsupported modes, and input, operational, and internal
-  failures exit 2. Exit 130 is reserved for the future interactive abort (the
-  fzf/skim convention), exactly as code 1 was reserved before Gate B activated
-  it. Explicit phonetic language matching remains gated on Yomi; no temporary
-  substring or language logic is hidden in Yuragi.
+  failures exit 2. Exit 130 is active for interactive abort (the fzf/skim
+  convention). Explicit phonetic language matching remains gated on Yomi; no
+  temporary substring or language logic is hidden in Yuragi.
 
 Evidence: unit tests, the `test-cli` executable contract test, `pixi run check`,
 and `pixi run build`.
@@ -64,9 +67,8 @@ Entry criteria:
 - Yuragi can pin an installable Moji version in Pixi and the Conda recipe.
 
 Yuragi work after the gate: wrap each `Candidate` in the agreed text view and
-add integration fixtures. Display columns and terminal width are not required
-for noninteractive search; they enter with the later MojoTUI gate. Do not copy
-search boundary or mapping code locally.
+add integration fixtures. Display columns and terminal width remain owned by
+MojoTUI. Do not copy search boundary, mapping, or display-width code locally.
 
 ## Integration gate B — Hibana matching contract (crossed)
 
@@ -131,8 +133,6 @@ provides language-specific representations and does not choose for the user.
 
 ## Later gates
 
-- Interactive mode begins only after the noninteractive core is stable and
-  adds MojoTUI behind an application adapter.
 - Preview, filesystem traversal, shell bindings, and configuration follow the
   same CLI/search core rather than creating alternate match pipelines.
 - Performance work follows representative benchmarks and must not change

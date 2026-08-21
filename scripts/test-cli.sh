@@ -56,7 +56,7 @@ if ! cmp -s "$test_dir/chunk-expected" "$test_dir/chunk-actual"; then
 fi
 
 if ! .pixi/bin/yuragi --help | grep -Fxq \
-  'Usage: yuragi --filter QUERY [--limit N] [--lang auto|zh|ja|ko] [options]'; then
+  'Usage: yuragi [--filter QUERY] [--limit N] [--lang auto|zh|ja|ko] [options]'; then
   echo "CLI help is missing the usage contract" >&2
   exit 1
 fi
@@ -105,7 +105,7 @@ if ! grep -Fxq \
   exit 1
 fi
 if ! grep -Fxq \
-  'Exit codes: 0 = success, 1 = no match, 2 = error, 130 = reserved (interactive abort).' \
+  'Exit codes: 0 = success, 1 = no match, 2 = error, 130 = interactive abort.' \
   <<<"$help_text"; then
   echo "CLI help is missing the documented exit-code contract" >&2
   exit 1
@@ -323,15 +323,28 @@ if [[ -s "$test_dir/stdout" ]] || ! grep -Fxq \
 fi
 
 set +e
-.pixi/bin/yuragi </dev/null >"$test_dir/stdout" 2>"$test_dir/stderr"
+.pixi/bin/yuragi --explain </dev/null \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
 exit_code=$?
 set -e
-if [[ $exit_code -ne 2 ]]; then
-  echo "invocation without --filter must exit 2 (got $exit_code)" >&2
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: --explain is a filter-mode report and requires --filter QUERY' \
+    "$test_dir/stderr"; then
+  echo "interactive --explain must produce its exact diagnostic" >&2
   exit 1
 fi
-if ! grep -q 'interactive mode is not available' "$test_dir/stderr"; then
-  echo "missing-filter invocation did not explain the unavailable mode" >&2
+
+set +e
+.pixi/bin/yuragi --lang zh </dev/null \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: --lang zh phonetic matching awaits the Yomi integration; direct matching works without --lang' \
+    "$test_dir/stderr"; then
+  echo "interactive phonetic mode must explain the Yomi gate" >&2
   exit 1
 fi
 

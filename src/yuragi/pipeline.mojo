@@ -1,4 +1,4 @@
-"""Application orchestration boundaries for noninteractive filtering."""
+"""Shared application orchestration for filtering and interactive ranking."""
 
 from hibana import Matcher, Scheme
 from std.collections import List
@@ -14,9 +14,9 @@ def matching_backend_required(options: Options) -> Bool:
 
 
 def validate_foundation_mode(options: Options) raises:
-    """Reject interactive and unavailable phonetic matching modes."""
-    if not options.has_filter:
-        raise Error("interactive mode is not available; use --filter QUERY")
+    """Reject invalid report combinations and unavailable phonetic modes."""
+    if options.explain and not options.has_filter:
+        raise Error("--explain is a filter-mode report and requires --filter QUERY")
     if options.explain and options.print0:
         raise Error(
             "--explain writes a line-oriented report and conflicts with --print0"
@@ -27,7 +27,7 @@ def validate_foundation_mode(options: Options) raises:
             "performs no matching"
         )
     if (
-        matching_backend_required(options)
+        (not options.has_filter or matching_backend_required(options))
         and options.has_language
         and options.language != "auto"
     ):
@@ -41,17 +41,24 @@ def validate_foundation_mode(options: Options) raises:
         )
 
 
-def select_ranked(
-    candidates: Span[Candidate, _], options: Options
+def rank_query(
+    candidates: Span[Candidate, _], query: StringSlice, options: Options
 ) raises -> List[RankedCandidate]:
-    """Match and boundedly rank candidates with one prepared matcher."""
+    """Match and boundedly rank one query through the shared Hibana pipeline."""
     var matcher = Matcher(
-        options.query,
+        query,
         case_mode=options.case_mode,
         scheme=Scheme.DEFAULT,
     )
     var k = options.limit if options.has_limit else len(candidates)
     return rank_candidates(candidates, matcher, k)
+
+
+def select_ranked(
+    candidates: Span[Candidate, _], options: Options
+) raises -> List[RankedCandidate]:
+    """Match and boundedly rank candidates with one prepared matcher."""
+    return rank_query(candidates, options.query, options)
 
 
 def _select_validated(

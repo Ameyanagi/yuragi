@@ -61,7 +61,7 @@ def test_help_and_version_text() raises:
     var options = parse_options(args^)
     assert_true(options.help_requested)
     assert_true(options.version_requested)
-    assert_true(usage().startswith("Usage: yuragi --filter QUERY"))
+    assert_true(usage().startswith("Usage: yuragi [--filter QUERY]"))
     assert_true(
         "      --limit N         emit at most N best-ranked candidates" in usage()
     )

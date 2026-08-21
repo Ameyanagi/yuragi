@@ -1,4 +1,4 @@
-"""Command-line parsing for Yuragi's noninteractive application mode."""
+"""Command-line parsing for Yuragi's filter and interactive modes."""
 
 from hibana import CaseMode
 from std.collections import List
@@ -151,17 +151,18 @@ def parse_options(args: List[String]) raises -> Options:
 def usage() -> String:
     """Return the current, deliberately narrow command-line contract."""
     return String(
-        "Usage: yuragi --filter QUERY [--limit N] [--lang auto|zh|ja|ko] "
+        "Usage: yuragi [--filter QUERY] [--limit N] [--lang auto|zh|ja|ko] "
         "[options]\n"
         "\n"
         "Read newline-delimited candidates from standard input and write selected\n"
-        "candidates to standard output. Non-empty queries use direct Hibana fuzzy\n"
-        "matching; phonetic language matching awaits Yomi integration.\n"
+        "candidates to standard output. Without --filter, open an inline picker;\n"
+        "filter mode uses direct Hibana fuzzy matching. Phonetic language matching\n"
+        "awaits Yomi integration.\n"
         "Smart case is the default: a query containing an ASCII uppercase letter\n"
         "matches case-sensitively.\n"
         "\n"
         "Options:\n"
-        "  -f, --filter QUERY    select candidates for QUERY\n"
+        "  -f, --filter QUERY    filter candidates noninteractively for QUERY\n"
         "      --limit N         emit at most N best-ranked candidates\n"
         "      --lang LANGUAGE   phonetic language hint (default: auto)\n"
         "  -i, --ignore-case     match case-insensitively (ASCII)\n"
@@ -174,8 +175,7 @@ def usage() -> String:
         "\n"
         "Invalid options exit before informational modes. If both --help and\n"
         "--version are validly supplied, --help wins.\n"
-        "Exit codes: 0 = success, 1 = no match, 2 = error, 130 = reserved "
-        "(interactive abort).\n"
+        "Exit codes: 0 = success, 1 = no match, 2 = error, 130 = interactive abort.\n"
     )
 
 

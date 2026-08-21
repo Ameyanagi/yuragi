@@ -12,16 +12,6 @@ from yuragi.options import parse_options
 from yuragi.pipeline import matching_backend_required, select, validate_foundation_mode
 
 
-def _assert_selection_rejected(var args: List[String]) raises:
-    var options = parse_options(args^)
-    var candidates = candidates_from_text("candidate\n")
-    try:
-        _ = select(candidates^, options)
-    except:
-        return
-    raise Error("expected selection to be rejected")
-
-
 def test_empty_filter_is_identity_selection() raises:
     var args: List[String] = ["yuragi", "--filter", ""]
     var options = parse_options(args^)
@@ -45,9 +35,10 @@ def test_nonempty_filter_uses_matching_backend() raises:
     assert_equal(selected[1].text, "bar")
 
 
-def test_rejects_unavailable_execution_modes() raises:
+def test_accepts_interactive_mode_and_rejects_unavailable_phonetics() raises:
     var interactive: List[String] = ["yuragi"]
-    _assert_selection_rejected(interactive^)
+    var interactive_options = parse_options(interactive^)
+    validate_foundation_mode(interactive_options)
 
     var phonetic: List[String] = [
         "yuragi",
@@ -66,8 +57,25 @@ def test_rejects_unavailable_execution_modes() raises:
     ):
         _ = select(candidates^, options)
 
+    var interactive_phonetic: List[String] = ["yuragi", "--lang", "zh"]
+    var interactive_phonetic_options = parse_options(interactive_phonetic^)
+    with assert_raises(
+        contains=(
+            "--lang zh phonetic matching awaits the Yomi integration; direct "
+            "matching works without --lang"
+        )
+    ):
+        validate_foundation_mode(interactive_phonetic_options)
+
 
 def test_explain_mode_validation() raises:
+    var interactive_args: List[String] = ["yuragi", "--explain"]
+    var interactive_options = parse_options(interactive_args^)
+    with assert_raises(
+        contains="--explain is a filter-mode report and requires --filter QUERY"
+    ):
+        validate_foundation_mode(interactive_options)
+
     var print0_args: List[String] = [
         "yuragi",
         "--filter",

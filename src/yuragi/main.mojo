@@ -1,4 +1,5 @@
 from std.collections import List
+from std.io import FileDescriptor
 from std.sys import argv, exit, stderr, stdin
 
 from yuragi.candidate import (
@@ -8,6 +9,7 @@ from yuragi.candidate import (
     render_candidates,
 )
 from yuragi.explain import render_explanation
+from yuragi.interactive import FinderOutcome, FinderSession
 from yuragi.options import Options, parse_options, usage, version_text
 from yuragi.pipeline import (
     matching_backend_required,
@@ -59,6 +61,16 @@ def main():
         print("yuragi: ", error, sep="", file=stderr)
         exit(2)
 
+    if not options.has_filter and FileDescriptor(0).isatty():
+        print(
+            (
+                "yuragi: pipe candidates into yuragi; standard input is the only "
+                "candidate source"
+            ),
+            file=stderr,
+        )
+        exit(2)
+
     var candidates = List[Candidate]()
     try:
         var input_framing = RecordFraming.NUL if options.read0 else RecordFraming.LINES
@@ -66,6 +78,25 @@ def main():
     except error:
         print("yuragi: input error: ", error, sep="", file=stderr)
         exit(2)
+
+    if not options.has_filter:
+        var finder = FinderSession(candidates^, options)
+        var outcome = FinderOutcome.ABORTED
+        try:
+            outcome = finder.run()
+        except error:
+            print("yuragi: terminal error: ", error, sep="", file=stderr)
+            exit(2)
+        if outcome == FinderOutcome.ABORTED:
+            exit(130)
+        var selected = finder.selection()
+        if len(selected) == 0:
+            exit(1)
+        var output_framing = (
+            RecordFraming.NUL if options.print0 else RecordFraming.LINES
+        )
+        print(render_candidates(selected^, output_framing), end="")
+        return
 
     try:
         if options.explain:

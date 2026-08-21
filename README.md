@@ -8,10 +8,10 @@ A CJK-aware fuzzy finder written in Mojo.
 
 Yuragi composes the ecosystem into an end-user fuzzy-finder application rather than exporting foundation algorithms.
 
-The first implementation milestone is intentionally narrow: accept candidates
-on standard input and provide deterministic noninteractive `--filter` output
-through direct fuzzy matching before adding phonetic representations or an
-interactive terminal UI.
+The current implementation accepts candidates on standard input and provides
+both an inline interactive picker and deterministic noninteractive `--filter`
+output through direct fuzzy matching. Phonetic representations remain gated on
+Yomi.
 The project is independently installable and does not require any application
 from the wider ecosystem.
 
@@ -38,9 +38,9 @@ under `src/yuragi/`; they are application implementation details rather than a
 separately supported library API. The Conda distribution is also named
 `yuragi`.
 
-The executable now implements the first noninteractive application boundary:
-validated options, UTF-8 stdin ingestion, stable candidate framing, and
-deterministic stdout. An empty query is an identity filter:
+The executable implements validated options, UTF-8 stdin ingestion, stable
+candidate framing, deterministic stdout, and an inline interactive application
+adapter. An empty filter query is an identity filter:
 
 ```sh
 printf "北京大学\nnotes\n" | pixi run yuragi --filter ''
@@ -73,14 +73,38 @@ printf 'apple\nbanana\n' | pixi run yuragi --filter ba --explain
 ```
 
 Use `--limit N` to emit at most the best N candidates. A non-empty query that
-matches nothing exits with status 1 and writes no candidate output. Exit status
-130 is reserved for interactive abort. Phonetic language matching still
-awaits Yomi; Yuragi does not duplicate CJK logic. See [PLAN.md](PLAN.md) for the
-remaining dependency gates and exact v0.1 acceptance criteria.
+matches nothing exits with status 1 and writes no candidate output. Phonetic
+language matching still awaits Yomi; Yuragi does not duplicate CJK logic. See
+[PLAN.md](PLAN.md) for the remaining dependency gates and exact v0.1 acceptance
+criteria.
 
 Use `--read0` and `--print0` for NUL framing when filenames can contain
 newlines. Smart case is the default; `--ignore-case` and `--no-ignore-case`
 provide hard ASCII case-sensitivity overrides.
+
+## Interactive
+
+Omit `--filter` to open a fixed-height picker inline on the controlling terminal:
+
+```sh
+ls | yuragi
+```
+
+Candidate input still comes only from standard input. The picker writes its UI
+directly to the controlling terminal, while stdout remains reserved for the
+accepted candidate. Its single fixed keymap has no `--bind` DSL:
+
+| Keys | Action |
+| --- | --- |
+| Enter | Accept the cursor candidate |
+| Esc, Ctrl-C | Abort |
+| Down, Ctrl-N | Move to the next candidate |
+| Up, Ctrl-P | Move to the previous candidate |
+| Backspace | Erase the last query grapheme |
+
+Exit codes are `0` for a successful match or acceptance, `1` when there is no
+match or nothing to accept, `2` for usage or operational errors, and `130` for
+interactive abort. Only a successful selection is written to stdout.
 
 ## Repository map
 
