@@ -150,7 +150,9 @@ if [[ $exit_code -ne 2 ]]; then
   exit 1
 fi
 if [[ -s "$test_dir/stdout" ]] || \
-  ! grep -Fxq 'yuragi: unknown argument: --unknown' "$test_dir/stderr"; then
+  ! grep -Fxq \
+    "yuragi: unknown argument '--unknown' (try 'yuragi --help')" \
+    "$test_dir/stderr"; then
   echo "invalid-option precedence did not produce its exact diagnostic" >&2
   exit 1
 fi
@@ -386,7 +388,7 @@ if [[ $exit_code -ne 2 ]]; then
   exit 1
 fi
 if [[ -s "$test_dir/stdout" ]] || ! grep -Fxq \
-  'yuragi: --limit requires a positive candidate count' \
+  "yuragi: invalid value '0' for --limit: the candidate count must be at least 1" \
   "$test_dir/stderr"; then
   echo "--limit 0 did not produce its exact diagnostic" >&2
   exit 1

@@ -239,11 +239,17 @@ def test_rejects_ambiguous_or_invalid_options() raises:
     var missing_query: List[String] = ["yuragi", "--query"]
     _assert_rejected(missing_query^)
     var language: List[String] = ["yuragi", "--lang", "en"]
-    _assert_rejected(language^)
+    with assert_raises(
+        contains="invalid value 'en' for --lang (possible values: auto, zh, ja, ko)"
+    ):
+        _ = parse_options(language^)
     var duplicate_language: List[String] = ["yuragi", "--lang", "zh", "--lang=ko"]
     _assert_rejected(duplicate_language^)
     var positional: List[String] = ["yuragi", "candidate.txt"]
     _assert_rejected(positional^)
+    var unknown: List[String] = ["yuragi", "--reverse"]
+    with assert_raises(contains="unknown argument '--reverse' (try 'yuragi --help')"):
+        _ = parse_options(unknown^)
 
 
 def test_rejects_invalid_limits() raises:
@@ -259,11 +265,17 @@ def test_rejects_invalid_limits() raises:
     var missing: List[String] = ["yuragi", "--limit"]
     _assert_rejected(missing^)
     var zero: List[String] = ["yuragi", "--limit=0"]
-    _assert_rejected(zero^)
+    with assert_raises(contains="invalid value '0' for --limit"):
+        _ = parse_options(zero^)
     var negative: List[String] = ["yuragi", "--limit", "-2"]
-    _assert_rejected(negative^)
-    var garbage: List[String] = ["yuragi", "--limit=many"]
-    _assert_rejected(garbage^)
+    with assert_raises(contains="invalid value '-2' for --limit"):
+        _ = parse_options(negative^)
+    var garbage: List[String] = ["yuragi", "--limit=abc"]
+    with assert_raises(contains="invalid value 'abc' for --limit"):
+        _ = parse_options(garbage^)
+    var overflow: List[String] = ["yuragi", "--limit=99999999999999999999"]
+    with assert_raises(contains="exceeds the supported integer range"):
+        _ = parse_options(overflow^)
 
 
 def main() raises:

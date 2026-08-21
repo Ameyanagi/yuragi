@@ -58,7 +58,11 @@ def _set_language(mut options: Options, value: StringSlice) raises:
         and language != "ja"
         and language != "ko"
     ):
-        raise Error("--lang must be one of: auto, zh, ja, ko")
+        raise Error(
+            "invalid value '",
+            language,
+            "' for --lang (possible values: auto, zh, ja, ko)",
+        )
     options.has_language = True
     options.language = language^
 
@@ -84,9 +88,27 @@ def _set_limit(mut options: Options, value: StringSlice) raises:
     try:
         limit = Int(String(value))
     except:
-        raise Error("--limit requires a positive candidate count")
+        var trimmed = value.strip()
+        var digits = trimmed
+        if trimmed.startswith("+"):
+            digits = trimmed.removeprefix("+")
+        if digits.byte_length() > 0 and digits.is_ascii_digit():
+            raise Error(
+                "invalid value '",
+                value,
+                "' for --limit: count exceeds the supported integer range",
+            )
+        raise Error(
+            "invalid value '",
+            value,
+            "' for --limit: expected a positive integer count (try 'yuragi --help')",
+        )
     if limit < 1:
-        raise Error("--limit requires a positive candidate count")
+        raise Error(
+            "invalid value '",
+            value,
+            "' for --limit: the candidate count must be at least 1",
+        )
     options.has_limit = True
     options.limit = limit
 
@@ -200,7 +222,7 @@ def parse_options(args: List[String]) raises -> Options:
         elif argument == "--no-ignore-case":
             _set_case_mode(options, CaseMode.EXACT)
         else:
-            raise Error("unknown argument: ", argument)
+            raise Error("unknown argument '", argument, "' (try 'yuragi --help')")
         index += 1
     _validate_options(options)
     return options^
