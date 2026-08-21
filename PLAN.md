@@ -28,7 +28,7 @@ remains candidate data.
 
 - Parse `--filter`, `--limit`, `--lang`, `--read0`, `--print0`, `--help`, and
   `--version` without accepting ambiguous positionals or duplicate selections.
-- Use Hibana smart ASCII case matching by default. `--ignore-case` and
+- Use Hibana smart ASCII case matching by default. `-i`/`--ignore-case` and
   `--no-ignore-case` are hard overrides that map directly to Hibana
   `CaseMode.IGNORE_ASCII` and `CaseMode.EXACT`.
 - Read piped stdin through the public `FileDescriptor.read_bytes()` API and
@@ -44,8 +44,10 @@ remains candidate data.
   order.
 - Exit with code 1 and empty stdout when a non-empty query has no match.
   Invalid usage, unsupported modes, and input, operational, and internal
-  failures exit 2. Explicit phonetic language matching remains gated on Yomi;
-  no temporary substring or language logic is hidden in Yuragi.
+  failures exit 2. Exit 130 is reserved for the future interactive abort (the
+  fzf/skim convention), exactly as code 1 was reserved before Gate B activated
+  it. Explicit phonetic language matching remains gated on Yomi; no temporary
+  substring or language logic is hidden in Yuragi.
 
 Evidence: unit tests, the `test-cli` executable contract test, `pixi run check`,
 and `pixi run build`.

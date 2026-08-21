@@ -75,6 +75,22 @@ def test_nul_framing_options() raises:
     assert_true(options.print0)
 
 
+def test_explain_option_and_usage() raises:
+    var args: List[String] = ["yuragi", "--filter", "ba", "--explain"]
+    var options = parse_options(args^)
+    assert_true(options.explain)
+    assert_true(
+        "      --explain         print rank, score, key kind, and match positions"
+        in usage()
+    )
+
+
+def test_rejects_duplicate_explain_option() raises:
+    var args: List[String] = ["yuragi", "--explain", "--explain"]
+    with assert_raises(contains="--explain may be specified only once"):
+        _ = parse_options(args^)
+
+
 def test_rejects_duplicate_nul_framing_options() raises:
     var read_args: List[String] = ["yuragi", "--read0", "--read0"]
     with assert_raises(contains="--read0 may be specified only once"):

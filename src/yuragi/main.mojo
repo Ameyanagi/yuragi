@@ -7,8 +7,14 @@ from yuragi.candidate import (
     RecordFraming,
     render_candidates,
 )
+from yuragi.explain import render_explanation
 from yuragi.options import Options, parse_options, usage, version_text
-from yuragi.pipeline import matching_backend_required, select, validate_foundation_mode
+from yuragi.pipeline import (
+    matching_backend_required,
+    select,
+    select_ranked,
+    validate_foundation_mode,
+)
 
 
 def _read_standard_input(framing: RecordFraming) raises -> List[Candidate]:
@@ -62,6 +68,13 @@ def main():
         exit(2)
 
     try:
+        if options.explain:
+            var ranked = select_ranked(candidates, options)
+            if len(ranked) == 0:
+                exit(1)
+            print(render_explanation(ranked^), end="")
+            return
+
         var selected = select(candidates^, options)
         if matching_backend_required(options) and len(selected) == 0:
             exit(1)

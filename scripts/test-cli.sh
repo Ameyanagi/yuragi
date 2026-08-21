@@ -99,9 +99,15 @@ if ! grep -Fxq \
   exit 1
 fi
 if ! grep -Fxq \
-  'Exit codes: 0 = success, 1 = no match, 2 = error.' \
+  '      --explain         print rank, score, key kind, and match positions' \
   <<<"$help_text"; then
-  echo "CLI help is missing the active no-match exit code" >&2
+  echo "--explain help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  'Exit codes: 0 = success, 1 = no match, 2 = error, 130 = reserved (interactive abort).' \
+  <<<"$help_text"; then
+  echo "CLI help is missing the documented exit-code contract" >&2
   exit 1
 fi
 if [[ "$(.pixi/bin/yuragi --version --help)" != "$help_text" ]] || \
@@ -154,6 +160,66 @@ printf 'apple\nbanana\nbar\n' | .pixi/bin/yuragi --filter ba \
   >"$test_dir/ranked-actual" 2>"$test_dir/ranked-stderr"
 if ! cmp -s "$test_dir/ranked-expected" "$test_dir/ranked-actual"; then
   echo "ranked filtering produced unexpected candidates or ordering" >&2
+  exit 1
+fi
+
+# This byte-exact fixture pins Hibana's published scoring table.
+printf '1	390	original	0,1	banana\n' >"$test_dir/explain-expected"
+printf 'apple\nbanana\n' | .pixi/bin/yuragi --filter ba --explain \
+  >"$test_dir/explain-actual" 2>"$test_dir/explain-stderr"
+if ! cmp -s "$test_dir/explain-expected" "$test_dir/explain-actual"; then
+  echo "--explain did not render the ranked Hibana match report" >&2
+  exit 1
+fi
+
+printf '1	265	original	0	北京大学\n' >"$test_dir/explain-cjk-expected"
+printf '北京大学\n' | .pixi/bin/yuragi --filter 北 --explain \
+  >"$test_dir/explain-cjk-actual" 2>"$test_dir/explain-cjk-stderr"
+if ! cmp -s "$test_dir/explain-cjk-expected" \
+  "$test_dir/explain-cjk-actual"; then
+  echo "--explain positions are not Unicode scalar indices" >&2
+  exit 1
+fi
+
+set +e
+printf 'apple\n' | .pixi/bin/yuragi --filter zz --explain \
+  >"$test_dir/explain-no-match-stdout" \
+  2>"$test_dir/explain-no-match-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 1 ]] || [[ -s "$test_dir/explain-no-match-stdout" ]]; then
+  echo "--explain with no matches must exit 1 with empty stdout" >&2
+  exit 1
+fi
+
+printf '%s\n' \
+  'yuragi: --explain writes a line-oriented report and conflicts with --print0' \
+  >"$test_dir/explain-print0-expected-stderr"
+set +e
+.pixi/bin/yuragi --filter ba --explain --print0 </dev/null \
+  >"$test_dir/explain-print0-stdout" \
+  2>"$test_dir/explain-print0-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/explain-print0-stdout" ]] || \
+  ! cmp -s "$test_dir/explain-print0-expected-stderr" \
+    "$test_dir/explain-print0-stderr"; then
+  echo "--explain with --print0 must produce its exact diagnostic" >&2
+  exit 1
+fi
+
+printf '%s\n' \
+  'yuragi: --explain requires a non-empty --filter query; an empty query performs no matching' \
+  >"$test_dir/explain-empty-expected-stderr"
+set +e
+.pixi/bin/yuragi --filter '' --explain </dev/null \
+  >"$test_dir/explain-empty-stdout" 2>"$test_dir/explain-empty-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/explain-empty-stdout" ]] || \
+  ! cmp -s "$test_dir/explain-empty-expected-stderr" \
+    "$test_dir/explain-empty-stderr"; then
+  echo "--explain with an empty query must produce its exact diagnostic" >&2
   exit 1
 fi
 

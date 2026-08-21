@@ -9,7 +9,7 @@ from std.testing import (
 
 from yuragi.candidate import candidates_from_text
 from yuragi.options import parse_options
-from yuragi.pipeline import matching_backend_required, select
+from yuragi.pipeline import matching_backend_required, select, validate_foundation_mode
 
 
 def _assert_selection_rejected(var args: List[String]) raises:
@@ -65,6 +65,36 @@ def test_rejects_unavailable_execution_modes() raises:
         )
     ):
         _ = select(candidates^, options)
+
+
+def test_explain_mode_validation() raises:
+    var print0_args: List[String] = [
+        "yuragi",
+        "--filter",
+        "ba",
+        "--explain",
+        "--print0",
+    ]
+    var print0_options = parse_options(print0_args^)
+    with assert_raises(
+        contains="--explain writes a line-oriented report and conflicts with --print0"
+    ):
+        validate_foundation_mode(print0_options)
+
+    var empty_args: List[String] = ["yuragi", "--filter", "", "--explain"]
+    var empty_options = parse_options(empty_args^)
+    with assert_raises(
+        contains=(
+            "--explain requires a non-empty --filter query; an empty query "
+            "performs no matching"
+        )
+    ):
+        validate_foundation_mode(empty_options)
+
+    var valid_args: List[String] = ["yuragi", "--filter", "ba", "--explain"]
+    var valid_options = parse_options(valid_args^)
+    assert_equal(valid_options.language, "auto")
+    validate_foundation_mode(valid_options)
 
 
 def test_limit_truncates_empty_filter_selection() raises:

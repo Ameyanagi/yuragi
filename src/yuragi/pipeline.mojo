@@ -17,6 +17,15 @@ def validate_foundation_mode(options: Options) raises:
     """Reject interactive and unavailable phonetic matching modes."""
     if not options.has_filter:
         raise Error("interactive mode is not available; use --filter QUERY")
+    if options.explain and options.print0:
+        raise Error(
+            "--explain writes a line-oriented report and conflicts with --print0"
+        )
+    if options.explain and options.query == "":
+        raise Error(
+            "--explain requires a non-empty --filter query; an empty query "
+            "performs no matching"
+        )
     if (
         matching_backend_required(options)
         and options.has_language
@@ -45,9 +54,10 @@ def select_ranked(
     return rank_candidates(candidates, matcher, k)
 
 
-def select(var candidates: List[Candidate], options: Options) raises -> List[Candidate]:
-    """Apply validated empty-query or ranked noninteractive selection."""
-    validate_foundation_mode(options)
+def _select_validated(
+    var candidates: List[Candidate], options: Options
+) raises -> List[Candidate]:
+    """Apply empty-query or ranked selection after mode validation."""
     if options.query == "":
         if not options.has_limit or options.limit >= len(candidates):
             return candidates^
@@ -71,3 +81,9 @@ def select(var candidates: List[Candidate], options: Options) raises -> List[Can
             )
         )
     return selected^
+
+
+def select(var candidates: List[Candidate], options: Options) raises -> List[Candidate]:
+    """Apply validated empty-query or ranked noninteractive selection."""
+    validate_foundation_mode(options)
+    return _select_validated(candidates^, options)

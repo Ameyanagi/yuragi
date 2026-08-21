@@ -20,6 +20,7 @@ struct Options(Copyable):
     var case_mode: CaseMode
     var read0: Bool
     var print0: Bool
+    var explain: Bool
     var help_requested: Bool
     var version_requested: Bool
 
@@ -34,6 +35,7 @@ struct Options(Copyable):
         self.case_mode = CaseMode.SMART_ASCII
         self.read0 = False
         self.print0 = False
+        self.explain = False
         self.help_requested = False
         self.version_requested = False
 
@@ -86,6 +88,12 @@ def _set_print0(mut options: Options) raises:
     options.print0 = True
 
 
+def _set_explain(mut options: Options) raises:
+    if options.explain:
+        raise Error("--explain may be specified only once")
+    options.explain = True
+
+
 def _set_case_mode(mut options: Options, case_mode: CaseMode) raises:
     if options.has_case_override:
         raise Error("case sensitivity may be specified only once")
@@ -128,6 +136,8 @@ def parse_options(args: List[String]) raises -> Options:
             _set_read0(options)
         elif argument == "--print0":
             _set_print0(options)
+        elif argument == "--explain":
+            _set_explain(options)
         elif argument == "--ignore-case" or argument == "-i":
             _set_case_mode(options, CaseMode.IGNORE_ASCII)
         elif argument == "--no-ignore-case":
@@ -158,12 +168,14 @@ def usage() -> String:
         "      --no-ignore-case  match case-sensitively\n"
         "      --read0           read NUL-delimited candidates from standard input\n"
         "      --print0          write NUL-delimited candidates to standard output\n"
+        "      --explain         print rank, score, key kind, and match positions\n"
         "  -h, --help            show this help\n"
         "      --version         show the version\n"
         "\n"
         "Invalid options exit before informational modes. If both --help and\n"
         "--version are validly supplied, --help wins.\n"
-        "Exit codes: 0 = success, 1 = no match, 2 = error.\n"
+        "Exit codes: 0 = success, 1 = no match, 2 = error, 130 = reserved "
+        "(interactive abort).\n"
     )
 
 

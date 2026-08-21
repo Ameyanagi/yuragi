@@ -54,11 +54,29 @@ printf 'apple\nbanana\n' | pixi run yuragi --filter ba
 banana
 ```
 
+Add `--explain` to print one stable, newline-terminated diagnostic line per
+retained match, in ranked order:
+
+```text
+RANK<TAB>SCORE<TAB>KEY<TAB>POSITIONS<TAB>TEXT
+```
+
+`RANK` is one-based, `SCORE` is Hibana's integer score, `KEY` is currently
+`original`, and `POSITIONS` contains comma-separated zero-based Unicode scalar
+indices. `TEXT` is the unmodified candidate. TEXT is last so the first four
+fields are tab-free and a consumer can split on the first four tabs even when
+TEXT itself contains tabs.
+
+```sh
+printf 'apple\nbanana\n' | pixi run yuragi --filter ba --explain
+1	390	original	0,1	banana
+```
+
 Use `--limit N` to emit at most the best N candidates. A non-empty query that
-matches nothing exits with status 1 and writes no candidate output. Explicit
-phonetic language matching still awaits Yomi; Yuragi does not duplicate CJK
-logic. See [PLAN.md](PLAN.md) for the remaining dependency gates and exact v0.1
-acceptance criteria.
+matches nothing exits with status 1 and writes no candidate output. Exit status
+130 is reserved for interactive abort. Phonetic language matching still
+awaits Yomi; Yuragi does not duplicate CJK logic. See [PLAN.md](PLAN.md) for the
+remaining dependency gates and exact v0.1 acceptance criteria.
 
 Use `--read0` and `--print0` for NUL framing when filenames can contain
 newlines. Smart case is the default; `--ignore-case` and `--no-ignore-case`
