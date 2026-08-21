@@ -12,6 +12,9 @@ from yuragi.explain import render_explanation
 from yuragi.interactive import FinderOutcome, FinderSession
 from yuragi.options import Options, parse_options, usage, version_text
 from yuragi.pipeline import (
+    InitialAutomationAction,
+    InitialAutomationDecision,
+    initial_automation,
     matching_backend_required,
     select,
     select_ranked,
@@ -80,7 +83,32 @@ def main():
         exit(2)
 
     if not options.has_filter:
-        var finder = FinderSession(candidates^, options)
+        var initial = InitialAutomationDecision()
+        try:
+            initial = initial_automation(candidates, options)
+        except error:
+            print("yuragi: internal error: ", error, sep="", file=stderr)
+            exit(2)
+
+        var output_framing = (
+            RecordFraming.NUL if options.print0 else RecordFraming.LINES
+        )
+        var action = initial.action
+        var initial_matches = initial^.take_matches()
+        if action == InitialAutomationAction.ACCEPT:
+            var selected = List[Candidate]()
+            selected.append(
+                Candidate(
+                    initial_matches[0].source_index,
+                    String(initial_matches[0].text),
+                )
+            )
+            print(render_candidates(selected^, output_framing), end="")
+            return
+        if action == InitialAutomationAction.EXIT_NO_MATCH:
+            exit(1)
+
+        var finder = FinderSession(candidates^, options, initial_matches^)
         var outcome = FinderOutcome.ABORTED
         try:
             outcome = finder.run()
@@ -92,9 +120,6 @@ def main():
         var selected = finder.selection()
         if len(selected) == 0:
             exit(1)
-        var output_framing = (
-            RecordFraming.NUL if options.print0 else RecordFraming.LINES
-        )
         print(render_candidates(selected^, output_framing), end="")
         return
 

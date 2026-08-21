@@ -26,8 +26,9 @@ remains candidate data.
 
 ## Current foundation — implemented
 
-- Parse `--filter`, `--limit`, `--lang`, `--read0`, `--print0`, `--help`, and
-  `--version` without accepting ambiguous positionals or duplicate selections.
+- Parse `--filter`, `--query`, `--select-1`, `--exit-0`, `--limit`, `--lang`,
+  `--read0`, `--print0`, `--help`, and `--version` without accepting ambiguous
+  positionals or duplicate selections.
 - Use Hibana smart ASCII case matching by default. `-i`/`--ignore-case` and
   `--no-ignore-case` are hard overrides that map directly to Hibana
   `CaseMode.IGNORE_ASCII` and `CaseMode.EXACT`.
@@ -46,6 +47,11 @@ remains candidate data.
   behind `src/yuragi/interactive.mojo`. It reuses the Hibana ranking pipeline,
   keeps cursor identity by candidate source index across query refinements, and
   writes terminal UI through `/dev/tty` rather than stdout.
+- Apply the interactive flag matrix before constructing the picker: `--query`
+  seeds the prompt and initial ranking, `--select-1` accepts a sole initial
+  match, and `--exit-0` exits 1 on an empty initial match set. The automation
+  flags compose and evaluate the seeded query; all three flags are usage errors
+  with `--filter`.
 - Exit with code 1 and empty stdout when a non-empty query has no match.
   Invalid usage, unsupported modes, and input, operational, and internal
   failures exit 2. Exit 130 is active for interactive abort (the fzf/skim

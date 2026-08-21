@@ -12,11 +12,15 @@ from yuragi.interactive import (
     _selected_id,
     _total_count,
 )
-from yuragi.options import Options
+from yuragi.options import Options, parse_options
+from yuragi.pipeline import rank_picker_query
 
 
-def _model(var candidates: List[Candidate]) -> _FinderModel:
-    return _FinderModel(candidates^, Options())
+def _model(var candidates: List[Candidate]) raises -> _FinderModel:
+    var options = Options()
+    var seeded_query = String(options.query)
+    var matches = rank_picker_query(candidates, seeded_query, options)
+    return _FinderModel(candidates^, options, matches^)
 
 
 def test_typing_narrows_matches_and_counter() raises:
@@ -77,6 +81,21 @@ def test_empty_query_preserves_all_candidates_in_source_order() raises:
     assert_equal(model.matches[0].text, "third")
     assert_equal(model.matches[1].text, "first")
     assert_equal(model.matches[2].text, "second")
+
+
+def test_seeded_query_initializes_ranked_state_on_first_match() raises:
+    var args: List[String] = ["yuragi", "--query", "ba"]
+    var options = parse_options(args^)
+    var candidates = candidates_from_text("apple\nbar\nbanana\n")
+    var session = FinderSession(candidates^, options)
+    ref model = session._model
+
+    assert_equal(model.query, "ba")
+    assert_equal(_match_count(model), 2)
+    assert_equal(model.matches[0].text, "bar")
+    assert_equal(model.matches[1].text, "banana")
+    assert_true(model.cursor.selected.value() == UInt(0))
+    assert_true(_selected_id(model).value() == model.matches[0].source_index)
 
 
 def main() raises:

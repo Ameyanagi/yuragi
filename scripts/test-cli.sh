@@ -56,12 +56,30 @@ if ! cmp -s "$test_dir/chunk-expected" "$test_dir/chunk-actual"; then
 fi
 
 if ! .pixi/bin/yuragi --help | grep -Fxq \
-  'Usage: yuragi [--filter QUERY] [--limit N] [--lang auto|zh|ja|ko] [options]'; then
+  'Usage: yuragi [--filter QUERY | --query QUERY] [--limit N]'; then
   echo "CLI help is missing the usage contract" >&2
   exit 1
 fi
 
 help_text="$(.pixi/bin/yuragi --help)"
+if ! grep -Fxq \
+  '  -q, --query STR       seed the interactive prompt with STR' \
+  <<<"$help_text"; then
+  echo "--query help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '  -1, --select-1        accept a sole initial match without the picker' \
+  <<<"$help_text"; then
+  echo "--select-1 help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '  -0, --exit-0          exit 1 on no initial matches without the picker' \
+  <<<"$help_text"; then
+  echo "--exit-0 help description is not column-aligned" >&2
+  exit 1
+fi
 if ! grep -Fxq \
   '      --lang LANGUAGE   phonetic language hint (default: auto)' \
   <<<"$help_text"; then
@@ -152,6 +170,39 @@ if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
     'yuragi: case sensitivity may be specified only once' \
     "$test_dir/stderr"; then
   echo "conflicting case flags must produce their exact diagnostic" >&2
+  exit 1
+fi
+
+printf 'banana\n' >"$test_dir/select-1-expected"
+printf 'banana\n' | .pixi/bin/yuragi --select-1 \
+  >"$test_dir/select-1-actual" 2>"$test_dir/select-1-stderr"
+if ! cmp -s "$test_dir/select-1-expected" "$test_dir/select-1-actual" || \
+  [[ -s "$test_dir/select-1-stderr" ]]; then
+  echo "--select-1 did not accept the sole initial match without a TTY" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --exit-0 </dev/null \
+  >"$test_dir/exit-0-stdout" 2>"$test_dir/exit-0-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 1 ]] || [[ -s "$test_dir/exit-0-stdout" ]] || \
+  [[ -s "$test_dir/exit-0-stderr" ]]; then
+  echo "--exit-0 with no initial match must exit 1 with empty output" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --query x --filter y \
+  >"$test_dir/query-filter-stdout" 2>"$test_dir/query-filter-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/query-filter-stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: --query cannot be used with --filter' \
+    "$test_dir/query-filter-stderr"; then
+  echo "--query with --filter must produce its exact usage error" >&2
   exit 1
 fi
 

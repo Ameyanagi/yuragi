@@ -49,6 +49,27 @@ def test_short_empty_filter() raises:
     assert_equal(options.limit, 0)
 
 
+def test_interactive_query_and_automation_options() raises:
+    var args: List[String] = [
+        "yuragi",
+        "-q",
+        "seed",
+        "--select-1",
+        "-0",
+    ]
+    var options = parse_options(args^)
+    assert_true(options.has_query)
+    assert_equal(options.query, "seed")
+    assert_true(options.select_1)
+    assert_true(options.exit_0)
+
+    var equals_args: List[String] = ["yuragi", "--query=equals", "-1"]
+    var equals_options = parse_options(equals_args^)
+    assert_true(equals_options.has_query)
+    assert_equal(equals_options.query, "equals")
+    assert_true(equals_options.select_1)
+
+
 def test_limit_equals_form() raises:
     var args: List[String] = ["yuragi", "--filter=ba", "--limit=12"]
     var options = parse_options(args^)
@@ -61,9 +82,15 @@ def test_help_and_version_text() raises:
     var options = parse_options(args^)
     assert_true(options.help_requested)
     assert_true(options.version_requested)
-    assert_true(usage().startswith("Usage: yuragi [--filter QUERY]"))
+    assert_true(usage().startswith("Usage: yuragi [--filter QUERY | --query QUERY]"))
     assert_true(
         "      --limit N         emit at most N best-ranked candidates" in usage()
+    )
+    assert_true(
+        "  -q, --query STR       seed the interactive prompt with STR" in usage()
+    )
+    assert_true(
+        "Interactive flag matrix: --query seeds the prompt; --select-1" in usage()
     )
     assert_equal(version_text(), "yuragi 0.0.0")
 
@@ -99,6 +126,40 @@ def test_rejects_duplicate_nul_framing_options() raises:
     var print_args: List[String] = ["yuragi", "--print0", "--print0"]
     with assert_raises(contains="--print0 may be specified only once"):
         _ = parse_options(print_args^)
+
+
+def test_rejects_duplicate_interactive_automation_options() raises:
+    var query_args: List[String] = ["yuragi", "--query", "a", "-q", "b"]
+    with assert_raises(contains="--query may be specified only once"):
+        _ = parse_options(query_args^)
+
+    var select_args: List[String] = ["yuragi", "--select-1", "-1"]
+    with assert_raises(contains="--select-1 may be specified only once"):
+        _ = parse_options(select_args^)
+
+    var exit_args: List[String] = ["yuragi", "--exit-0", "-0"]
+    with assert_raises(contains="--exit-0 may be specified only once"):
+        _ = parse_options(exit_args^)
+
+
+def test_rejects_filter_with_interactive_only_flags() raises:
+    var query_args: List[String] = [
+        "yuragi",
+        "--query",
+        "x",
+        "--filter",
+        "y",
+    ]
+    with assert_raises(contains="--query cannot be used with --filter"):
+        _ = parse_options(query_args^)
+
+    var select_args: List[String] = ["yuragi", "--filter", "x", "-1"]
+    with assert_raises(contains="--select-1 cannot be used with --filter"):
+        _ = parse_options(select_args^)
+
+    var exit_args: List[String] = ["yuragi", "-0", "--filter=x"]
+    with assert_raises(contains="--exit-0 cannot be used with --filter"):
+        _ = parse_options(exit_args^)
 
 
 def test_case_mode_defaults_to_smart_ascii() raises:
@@ -151,6 +212,8 @@ def test_rejects_ambiguous_or_invalid_options() raises:
     _assert_rejected(duplicate^)
     var missing: List[String] = ["yuragi", "--filter"]
     _assert_rejected(missing^)
+    var missing_query: List[String] = ["yuragi", "--query"]
+    _assert_rejected(missing_query^)
     var language: List[String] = ["yuragi", "--lang", "en"]
     _assert_rejected(language^)
     var duplicate_language: List[String] = ["yuragi", "--lang", "zh", "--lang=ko"]

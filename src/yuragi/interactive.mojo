@@ -33,7 +33,7 @@ from std.ffi import c_int, external_call
 
 from yuragi.candidate import Candidate
 from yuragi.options import Options
-from yuragi.pipeline import rank_query
+from yuragi.pipeline import rank_picker_query
 from yuragi.ranking import RankedCandidate
 
 
@@ -55,20 +55,6 @@ struct FinderOutcome(Copyable, Equatable, ImplicitlyCopyable):
         return self._value == other._value
 
 
-def _identity_rows(candidates: Span[Candidate, _]) -> MojoList[RankedCandidate]:
-    var rows = MojoList[RankedCandidate](capacity=len(candidates))
-    for index in range(len(candidates)):
-        rows.append(
-            RankedCandidate(
-                candidates[index].source_index,
-                String(candidates[index].text),
-                0,
-                MojoList[Int](),
-            )
-        )
-    return rows^
-
-
 struct _FinderModel(Copyable):
     var candidates: MojoList[Candidate]
     var options: Options
@@ -79,10 +65,14 @@ struct _FinderModel(Copyable):
     var accepted_source_index: Optional[Int]
     var outcome: FinderOutcome
 
-    def __init__(out self, var candidates: MojoList[Candidate], options: Options):
-        var matches = _identity_rows(candidates)
+    def __init__(
+        out self,
+        var candidates: MojoList[Candidate],
+        options: Options,
+        var matches: MojoList[RankedCandidate],
+    ):
         self.options = options.copy()
-        self.query = String()
+        self.query = String(options.query)
         self.cursor = ListState()
         self.selected_source_index = None
         self.accepted_source_index = None
@@ -130,11 +120,7 @@ def _rerank(mut model: _FinderModel) raises:
         previous_row = Int(model.cursor.selected.value())
     var previous_id = model.selected_source_index.copy()
 
-    var matches: MojoList[RankedCandidate]
-    if model.query == "":
-        matches = _identity_rows(model.candidates)
-    else:
-        matches = rank_query(model.candidates, model.query, model.options)
+    var matches = rank_picker_query(model.candidates, model.query, model.options)
     model.matches = matches^
 
     if len(model.matches) == 0:
@@ -318,9 +304,22 @@ struct FinderSession:
 
     var _model: _FinderModel
 
-    def __init__(out self, var candidates: MojoList[Candidate], options: Options):
+    def __init__(
+        out self, var candidates: MojoList[Candidate], options: Options
+    ) raises:
         """Create an interactive session over owned candidates."""
-        self._model = _FinderModel(candidates^, options)
+        var seeded_query = String(options.query)
+        var matches = rank_picker_query(candidates, seeded_query, options)
+        self._model = _FinderModel(candidates^, options, matches^)
+
+    def __init__(
+        out self,
+        var candidates: MojoList[Candidate],
+        options: Options,
+        var initial_matches: MojoList[RankedCandidate],
+    ):
+        """Create a session from the pure pre-TUI initial ranking."""
+        self._model = _FinderModel(candidates^, options, initial_matches^)
 
     def run(mut self) raises -> FinderOutcome:
         """Run the inline picker on the controlling terminal."""

@@ -9,7 +9,13 @@ from std.testing import (
 
 from yuragi.candidate import candidates_from_text
 from yuragi.options import parse_options
-from yuragi.pipeline import matching_backend_required, select, validate_foundation_mode
+from yuragi.pipeline import (
+    InitialAutomationAction,
+    initial_automation,
+    matching_backend_required,
+    select,
+    validate_foundation_mode,
+)
 
 
 def test_empty_filter_is_identity_selection() raises:
@@ -33,6 +39,44 @@ def test_nonempty_filter_uses_matching_backend() raises:
     assert_equal(len(selected), 2)
     assert_equal(selected[0].text, "banana")
     assert_equal(selected[1].text, "bar")
+
+
+def test_initial_automation_composes_over_seeded_matches() raises:
+    var select_args: List[String] = [
+        "yuragi",
+        "--query",
+        "banana",
+        "--select-1",
+        "--exit-0",
+    ]
+    var select_options = parse_options(select_args^)
+    var candidates = candidates_from_text("apple\nbanana\nbar\n")
+    var accepted = initial_automation(candidates, select_options)
+    assert_true(accepted.action == InitialAutomationAction.ACCEPT)
+    assert_equal(len(accepted.matches), 1)
+    assert_equal(accepted.matches[0].text, "banana")
+
+    var exit_args: List[String] = [
+        "yuragi",
+        "--query",
+        "missing",
+        "--select-1",
+        "--exit-0",
+    ]
+    var exit_options = parse_options(exit_args^)
+    var no_match = initial_automation(candidates, exit_options)
+    assert_true(no_match.action == InitialAutomationAction.EXIT_NO_MATCH)
+    assert_equal(len(no_match.matches), 0)
+
+
+def test_initial_automation_empty_seed_uses_all_candidates() raises:
+    var args: List[String] = ["yuragi", "--select-1", "--limit", "1"]
+    var options = parse_options(args^)
+    var candidates = candidates_from_text("first\nsecond\n")
+    var decision = initial_automation(candidates, options)
+
+    assert_true(decision.action == InitialAutomationAction.CONTINUE)
+    assert_equal(len(decision.matches), 2)
 
 
 def test_accepts_interactive_mode_and_rejects_unavailable_phonetics() raises:

@@ -94,6 +94,16 @@ Candidate input still comes only from standard input. The picker writes its UI
 directly to the controlling terminal, while stdout remains reserved for the
 accepted candidate. Its single fixed keymap has no `--bind` DSL:
 
+- `--query STR`/`-q STR` pre-fills the prompt and computes its initial ranking.
+- `--select-1`/`-1` prints and accepts a sole initial match without opening the
+  picker.
+- `--exit-0`/`-0` exits with status 1 and empty stdout when the initial query
+  has no matches, without opening the picker.
+
+The two automation flags compose with each other and evaluate the `--query`
+seed when supplied. All three flags are interactive-only and are usage errors
+with `--filter`.
+
 | Keys | Action |
 | --- | --- |
 | Enter | Accept the cursor candidate |
