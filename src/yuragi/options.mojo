@@ -11,16 +11,20 @@ struct Options(Copyable):
 
     var has_filter: Bool
     var has_language: Bool
+    var has_limit: Bool
     var query: String
     var language: String
+    var limit: Int
     var help_requested: Bool
     var version_requested: Bool
 
     def __init__(out self):
         self.has_filter = False
         self.has_language = False
+        self.has_limit = False
         self.query = String()
         self.language = String("auto")
+        self.limit = 0
         self.help_requested = False
         self.version_requested = False
 
@@ -47,6 +51,20 @@ def _set_filter(mut options: Options, value: StringSlice) raises:
     options.query = String(value)
 
 
+def _set_limit(mut options: Options, value: StringSlice) raises:
+    if options.has_limit:
+        raise Error("--limit may be specified only once")
+    var limit: Int
+    try:
+        limit = Int(String(value))
+    except:
+        raise Error("--limit requires a positive candidate count")
+    if limit < 1:
+        raise Error("--limit requires a positive candidate count")
+    options.has_limit = True
+    options.limit = limit
+
+
 def parse_options(args: List[String]) raises -> Options:
     """Parse all argv before applying help/version execution precedence."""
     var options = Options()
@@ -64,6 +82,13 @@ def parse_options(args: List[String]) raises -> Options:
             _set_filter(options, args[index])
         elif argument.startswith("--filter="):
             _set_filter(options, argument.removeprefix("--filter="))
+        elif argument == "--limit":
+            if index + 1 >= len(args):
+                raise Error("--limit requires a positive candidate count")
+            index += 1
+            _set_limit(options, args[index])
+        elif argument.startswith("--limit="):
+            _set_limit(options, argument.removeprefix("--limit="))
         elif argument == "--lang":
             if index + 1 >= len(args):
                 raise Error("--lang requires a language")
@@ -80,21 +105,22 @@ def parse_options(args: List[String]) raises -> Options:
 def usage() -> String:
     """Return the current, deliberately narrow command-line contract."""
     return String(
-        "Usage: yuragi --filter QUERY [--lang auto|zh|ja|ko]\n"
+        "Usage: yuragi --filter QUERY [--limit N] [--lang auto|zh|ja|ko]\n"
         "\n"
         "Read newline-delimited candidates from standard input and write selected\n"
-        "candidates to standard output. Non-empty matching is gated on the Moji,\n"
-        "Hibana, and Yomi integration milestone.\n"
+        "candidates to standard output. Non-empty queries use direct Hibana fuzzy\n"
+        "matching; phonetic language matching awaits Yomi integration.\n"
         "\n"
         "Options:\n"
         "  -f, --filter QUERY   select candidates for QUERY\n"
+        "      --limit N        emit at most N best-ranked candidates\n"
         "      --lang LANGUAGE  phonetic language hint (default: auto)\n"
         "  -h, --help           show this help\n"
         "      --version        show the version\n"
         "\n"
         "Invalid options exit before informational modes. If both --help and\n"
         "--version are validly supplied, --help wins.\n"
-        "Exit codes: 0 = success, 1 = no match (reserved), 2 = error.\n"
+        "Exit codes: 0 = success, 1 = no match, 2 = error.\n"
     )
 
 

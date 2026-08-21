@@ -13,12 +13,21 @@ def _assert_rejected(var args: List[String]) raises:
 
 
 def test_filter_and_language_options() raises:
-    var args: List[String] = ["yuragi", "--filter", "bjdx", "--lang=zh"]
+    var args: List[String] = [
+        "yuragi",
+        "--filter",
+        "bjdx",
+        "--limit",
+        "3",
+        "--lang=zh",
+    ]
     var options = parse_options(args^)
     assert_true(options.has_filter)
     assert_equal(options.query, "bjdx")
     assert_equal(options.language, "zh")
     assert_true(options.has_language)
+    assert_true(options.has_limit)
+    assert_equal(options.limit, 3)
     assert_false(options.help_requested)
 
 
@@ -29,6 +38,15 @@ def test_short_empty_filter() raises:
     assert_equal(options.query, "")
     assert_equal(options.language, "auto")
     assert_false(options.has_language)
+    assert_false(options.has_limit)
+    assert_equal(options.limit, 0)
+
+
+def test_limit_equals_form() raises:
+    var args: List[String] = ["yuragi", "--filter=ba", "--limit=12"]
+    var options = parse_options(args^)
+    assert_true(options.has_limit)
+    assert_equal(options.limit, 12)
 
 
 def test_help_and_version_text() raises:
@@ -37,6 +55,9 @@ def test_help_and_version_text() raises:
     assert_true(options.help_requested)
     assert_true(options.version_requested)
     assert_true(usage().startswith("Usage: yuragi --filter QUERY"))
+    assert_true(
+        "      --limit N        emit at most N best-ranked candidates" in usage()
+    )
     assert_equal(version_text(), "yuragi 0.0.0")
 
 
@@ -51,6 +72,26 @@ def test_rejects_ambiguous_or_invalid_options() raises:
     _assert_rejected(duplicate_language^)
     var positional: List[String] = ["yuragi", "candidate.txt"]
     _assert_rejected(positional^)
+
+
+def test_rejects_invalid_limits() raises:
+    var duplicate: List[String] = [
+        "yuragi",
+        "--filter",
+        "a",
+        "--limit",
+        "2",
+        "--limit=1",
+    ]
+    _assert_rejected(duplicate^)
+    var missing: List[String] = ["yuragi", "--limit"]
+    _assert_rejected(missing^)
+    var zero: List[String] = ["yuragi", "--limit=0"]
+    _assert_rejected(zero^)
+    var negative: List[String] = ["yuragi", "--limit", "-2"]
+    _assert_rejected(negative^)
+    var garbage: List[String] = ["yuragi", "--limit=many"]
+    _assert_rejected(garbage^)
 
 
 def main() raises:

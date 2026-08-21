@@ -3,7 +3,7 @@ from std.sys import argv, exit, stderr, stdin
 
 from yuragi.candidate import Candidate, CandidateInputBuffer, render_candidates
 from yuragi.options import Options, parse_options, usage, version_text
-from yuragi.pipeline import select_without_matching, validate_foundation_mode
+from yuragi.pipeline import matching_backend_required, select, validate_foundation_mode
 
 
 def _read_standard_input() raises -> List[Candidate]:
@@ -56,7 +56,9 @@ def main():
         exit(2)
 
     try:
-        var selected = select_without_matching(candidates^, options)
+        var selected = select(candidates^, options)
+        if matching_backend_required(options) and len(selected) == 0:
+            exit(1)
         print(render_candidates(selected^), end="")
     except error:
         print("yuragi: internal error: ", error, sep="", file=stderr)

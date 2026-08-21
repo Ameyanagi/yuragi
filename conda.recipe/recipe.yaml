@@ -17,8 +17,10 @@ build:
 requirements:
   build:
     - mojo-compiler =1.0.0
+    - mojo-hibana
   host:
     - mojo-compiler =1.0.0
+    - mojo-hibana
   run:
     - ${{ pin_compatible('mojo-compiler') }}
 
@@ -31,6 +33,10 @@ tests:
       - printf '北京大学\n\nnotes\r\n' > expected.txt
       - yuragi --filter '' < candidates.txt > actual.txt
       - cmp expected.txt actual.txt
+      - printf 'apple\nbanana\n' > ranked-input.txt
+      - printf 'banana\n' > ranked-expected.txt
+      - yuragi --filter ba < ranked-input.txt > ranked-actual.txt
+      - cmp ranked-expected.txt ranked-actual.txt
 
 about:
   homepage: https://github.com/Ameyanagi/yuragi

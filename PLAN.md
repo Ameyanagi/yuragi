@@ -24,19 +24,24 @@ a CR in an unterminated final record remains candidate data.
 
 ## Current foundation — implemented
 
-- Parse `--filter`, `--lang`, `--help`, and `--version` without accepting
-  ambiguous positionals or duplicate filter/language selections.
+- Parse `--filter`, `--limit`, `--lang`, `--help`, and `--version` without
+  accepting ambiguous positionals or duplicate filter/language/limit
+  selections.
 - Read piped stdin through the public `FileDescriptor.read_bytes()` API and
   validate UTF-8 at the effect boundary after byte aggregation. A controlled
   unit test forces one UTF-8 scalar across a chunk boundary; the compiled CLI
   fixture covers the nominal 4 KiB buffer layout without assuming full reads.
 - Preserve Unicode candidate text, blank candidates, and source order.
 - Render newline-delimited candidates deterministically.
-- Execute empty-query filtering as identity selection.
-- Reject non-empty filtering with exit code 2 and an explicit dependency-gate
-  diagnostic. Invalid usage, unsupported modes, and input, operational, and
-  internal failures exit 2. Exit code 1 is reserved for no match. No temporary
-  substring or language logic is hidden in Yuragi.
+- Execute empty-query filtering as identity selection, with optional
+  input-order truncation through `--limit`.
+- Rank non-empty direct matches through the installed Hibana package with a
+  bounded top-K path. The documented ordering is score descending, then input
+  order.
+- Exit with code 1 and empty stdout when a non-empty query has no match.
+  Invalid usage, unsupported modes, and input, operational, and internal
+  failures exit 2. Explicit phonetic language matching remains gated on Yomi;
+  no temporary substring or language logic is hidden in Yuragi.
 
 Evidence: unit tests, the `test-cli` executable contract test, `pixi run check`,
 and `pixi run build`.
@@ -57,7 +62,12 @@ add integration fixtures. Display columns and terminal width are not required
 for noninteractive search; they enter with the later MojoTUI gate. Do not copy
 search boundary or mapping code locally.
 
-## Integration gate B — Hibana matching contract
+## Integration gate B — Hibana matching contract (crossed)
+
+Gate B is crossed for direct matching. Hibana is pinned as an installable
+Conda package from a local channel, and Yuragi consumes the installed `hibana`
+module rather than sibling source paths. Non-empty `--filter` ranks with score
+descending followed by input order, and no-match exit code 1 is active.
 
 Entry criteria:
 
@@ -70,9 +80,9 @@ Entry criteria:
 - Representative ASCII, Unicode, and stable-tie fixtures pass.
 - Yuragi can pin an installable Hibana version.
 
-Yuragi work after the gate: replace the current non-empty-query rejection with
-matcher orchestration, define stable tie-breaking, and add `--filter` CLI tests.
-Scoring remains entirely in Hibana.
+Completed Yuragi work: the non-empty-query rejection is replaced by matcher
+orchestration, stable tie-breaking, bounded top-K selection, and byte-exact
+`--filter` CLI tests. Scoring remains entirely in Hibana.
 
 ## Integration gate C — Yomi representation contract
 
