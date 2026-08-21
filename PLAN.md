@@ -108,6 +108,9 @@ Yuragi work after the gate: generate direct and phonetic candidate views, merge
 their Hibana results under a documented ranking policy, and prove that matches
 highlight the original CJK source ranges.
 
+The ranking policy for merged direct+phonetic results is specified in
+`docs/multi-key-design.md`.
+
 Yuragi owns `--lang auto`: its application policy will define script detection,
 mixed-script ordering, explicit-language precedence, and fallback behavior. Yomi
 provides language-specific representations and does not choose for the user.
