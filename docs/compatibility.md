@@ -29,10 +29,11 @@ its first release. Each release names the exact compiler used to build it.
 
 - Standard input must be valid UTF-8 and is currently buffered in memory.
 - `--filter ''` is implemented as identity selection.
-- Non-empty queries exit with status 2 until Moji, Hibana, and Yomi pass the
-  integration gates in `PLAN.md`.
-- Interactive mode, Windows line-oriented console behavior, configuration, and
-  shell bindings are not yet implemented.
+- Non-empty `--filter` queries rank candidates through the installed Hibana
+  package.
+- An inline interactive picker is implemented with a fixed keymap. It does not
+  yet support `--bind`, configuration, or shell bindings.
+- Phonetic `--lang` matching still awaits Yomi.
 
 ## CLI precedence
 
@@ -43,6 +44,7 @@ validly supplied, `--help` wins over `--version`, independent of flag order.
 
 ## Exit status
 
-- `0`: successful output or an informational mode;
-- `2`: invalid command-line usage or a requested mode that is not implemented;
-- `1`: input decoding, I/O, or unexpected internal/operational failure.
+- `0`: success or an informational mode;
+- `1`: no match or nothing accepted;
+- `2`: usage or operational error, including input decoding;
+- `130`: interactive abort.

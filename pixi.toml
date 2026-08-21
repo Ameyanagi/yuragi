@@ -11,11 +11,12 @@ version = "0.0.0"
 
 [tasks]
 build = { cmd = "mkdir -p .pixi/bin && mojo build --Werror -I src src/yuragi/main.mojo -o .pixi/bin/yuragi", description = "Build the Yuragi executable with warnings as errors" }
-check = { depends-on = ["format-check", "test", "test-cli", "test-interactive"], description = "Run the complete validation suite" }
+check = { depends-on = ["format-check", "readme-check", "test", "test-cli", "test-interactive"], description = "Run the complete validation suite" }
 example = { cmd = "mojo run --Werror -I src examples/basic.mojo", description = "Run the structural smoke example" }
 format = { cmd = "bash scripts/format.sh", description = "Format Mojo source files" }
 format-check = { cmd = "bash scripts/check-format.sh", description = "Verify Mojo formatting without modifying source" }
 package = { cmd = "rattler-build build --recipe conda.recipe/recipe.yaml -c https://ameyanagi.github.io/mojo-channel -c conda-forge -c https://conda.modular.com/max -c https://repo.prefix.dev/modular-community", description = "Build the local Conda package" }
+readme-check = { cmd = "bash scripts/check-readme.sh", description = "Compile README Mojo examples" }
 test = { cmd = "bash scripts/test.sh", description = "Run all Mojo TestSuite files" }
 test-cli = { cmd = "bash scripts/test-cli.sh", depends-on = ["build"], description = "Verify the compiled noninteractive CLI contract" }
 test-interactive = { cmd = "bash scripts/test-interactive.sh", depends-on = ["build"], description = "Verify the compiled interactive PTY contract" }

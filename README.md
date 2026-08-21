@@ -6,7 +6,8 @@ A CJK-aware fuzzy finder written in Mojo.
 
 ## Scope
 
-Yuragi composes the ecosystem into an end-user fuzzy-finder application rather than exporting foundation algorithms.
+Yuragi composes the ecosystem into an end-user fuzzy-finder application rather
+than exporting foundation algorithms.
 
 The current implementation accepts candidates on standard input and provides
 both an inline interactive picker and deterministic noninteractive `--filter`
@@ -15,7 +16,20 @@ Yomi.
 The project is independently installable and does not require any application
 from the wider ecosystem.
 
-## Development
+## Install
+
+Install the published application with Pixi:
+
+```sh
+pixi global install yuragi \
+  --channel https://ameyanagi.github.io/mojo-channel \
+  --channel https://conda.modular.com/max \
+  --channel conda-forge
+```
+
+This puts a `yuragi` binary on PATH, so `ls | yuragi` works as typed.
+
+### From source
 
 Install [Pixi](https://pixi.sh/), then run:
 
@@ -25,11 +39,44 @@ pixi run check
 pixi run example
 ```
 
+In a development checkout, the equivalent of `ls | yuragi` is
+`ls | pixi run yuragi`, which rebuilds the binary first. Internal application
+modules compile with
+`pixi run mojo run -I src examples/basic.mojo`.
+
 The exact stable Mojo compiler and all development dependencies are captured in
 `pixi.lock`. Runtime and library code is Mojo-first and pure Mojo wherever
 practical. Build-time data generation may use another language when justified,
 but generated outputs must be deterministic, checksum-pinned, licensed, and
 documented.
+
+## Quickstart
+
+This program parses a filter query, ingests candidates, ranks them through
+Yuragi's application pipeline, and renders the matches:
+
+```mojo
+from std.collections import List
+
+from yuragi.candidate import candidates_from_text, render_candidates
+from yuragi.options import parse_options
+from yuragi.pipeline import select
+
+
+def main() raises:
+    var args: List[String] = ["yuragi", "--filter", "ba"]
+    var options = parse_options(args^)
+    var candidates = candidates_from_text("apple\nbanana\nbar\n")
+    var selected = select(candidates^, options)
+    print(render_candidates(selected^), end="")
+```
+
+Expected output:
+
+```text
+banana
+bar
+```
 
 ## Application package
 
@@ -89,6 +136,9 @@ Omit `--filter` to open a fixed-height picker inline on the controlling terminal
 ```sh
 ls | yuragi
 ```
+
+In a development checkout, use `ls | pixi run yuragi` instead; this rebuilds
+the binary before running it.
 
 Candidate input still comes only from standard input. The picker writes its UI
 directly to the controlling terminal, while stdout remains reserved for the
