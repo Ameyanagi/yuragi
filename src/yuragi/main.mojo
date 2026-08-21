@@ -23,7 +23,7 @@ from yuragi.pipeline import (
 
 
 def _read_standard_input(framing: RecordFraming) raises -> List[Candidate]:
-    """Read standard input once through the public descriptor API as UTF-8."""
+    """Read standard input once and decode buffered bytes as lossy UTF-8."""
     var input = CandidateInputBuffer()
     var buffer = List[UInt8](length=4096, fill=0)
     var stream = stdin

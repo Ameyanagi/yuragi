@@ -85,9 +85,10 @@ under `src/yuragi/`; they are application implementation details rather than a
 separately supported library API. The Conda distribution is also named
 `yuragi`.
 
-The executable implements validated options, UTF-8 stdin ingestion, stable
-candidate framing, deterministic stdout, and an inline interactive application
-adapter. An empty filter query is an identity filter:
+The executable implements validated options, buffered UTF-8 stdin ingestion,
+stable candidate framing, deterministic stdout, and an inline interactive
+application adapter. Invalid UTF-8 bytes are replaced with U+FFFD rather than
+failing. An empty filter query is an identity filter:
 
 ```sh
 printf "北京大学\nnotes\n" | pixi run yuragi --filter ''
@@ -165,6 +166,8 @@ with `--filter`.
 | TAB | With `--multi`, toggle the cursor mark and move down |
 | Shift-TAB | With `--multi`, toggle the cursor mark and move up |
 | Backspace | Erase the last query grapheme |
+| Ctrl-U | Clear the query |
+| Ctrl-W | Delete the trailing word from the query |
 
 Marks follow candidate source identities, so they survive query refinement
 even while a marked candidate is absent from the current matches. TAB and

@@ -30,7 +30,7 @@ struct Candidate(Copyable):
 
 
 struct CandidateInputBuffer(Copyable):
-    """Accumulate arbitrary byte chunks before validating UTF-8 once."""
+    """Accumulate arbitrary byte chunks before decoding UTF-8 lossily once."""
 
     var _bytes: List[UInt8]
 
@@ -44,12 +44,71 @@ struct CandidateInputBuffer(Copyable):
 
     def candidates(
         self, framing: RecordFraming = RecordFraming.LINES
-    ) raises -> List[Candidate]:
-        """Validate the complete byte stream and split it into candidates."""
-        var text = String(from_utf8=self._bytes[:])
+    ) -> List[Candidate]:
+        """Decode the complete byte stream lossily and split it into candidates."""
+        var text = _decode_utf8_lossy(self._bytes[:])
         if framing == RecordFraming.NUL:
             return candidates_from_nul_text(text)
         return candidates_from_text(text)
+
+
+def _valid_utf8_sequence_length(bytes: Span[UInt8, _], offset: Int) -> Int:
+    """Return the valid scalar length at offset, or zero for an invalid byte."""
+    var first = Int(bytes[offset])
+    if first <= 0x7F:
+        return 1
+
+    var expected: Int
+    if first >= 0xC2 and first <= 0xDF:
+        expected = 2
+    elif first >= 0xE0 and first <= 0xEF:
+        expected = 3
+    elif first >= 0xF0 and first <= 0xF4:
+        expected = 4
+    else:
+        return 0
+
+    if offset + expected > len(bytes):
+        return 0
+    for index in range(1, expected):
+        var continuation = Int(bytes[offset + index])
+        if continuation < 0x80 or continuation > 0xBF:
+            return 0
+
+    var second = Int(bytes[offset + 1])
+    if first == 0xE0 and second < 0xA0:
+        return 0
+    if first == 0xED and second > 0x9F:
+        return 0
+    if first == 0xF0 and second < 0x90:
+        return 0
+    if first == 0xF4 and second > 0x8F:
+        return 0
+    return expected
+
+
+def _decode_utf8_lossy(bytes: Span[UInt8, _]) -> String:
+    """Replace each invalid UTF-8 byte while preserving maximal valid runs."""
+    var decoded = List[UInt8](capacity=len(bytes))
+    var run_start = 0
+    var offset = 0
+    while offset < len(bytes):
+        var sequence_length = _valid_utf8_sequence_length(bytes, offset)
+        if sequence_length > 0:
+            offset += sequence_length
+            continue
+
+        for index in range(run_start, offset):
+            decoded.append(bytes[index])
+        decoded.append(UInt8(0xEF))
+        decoded.append(UInt8(0xBF))
+        decoded.append(UInt8(0xBD))
+        offset += 1
+        run_start = offset
+
+    for index in range(run_start, len(bytes)):
+        decoded.append(bytes[index])
+    return String(from_utf8_lossy=decoded)
 
 
 def candidates_from_text(text: StringSlice) -> List[Candidate]:

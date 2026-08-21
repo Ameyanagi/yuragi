@@ -111,6 +111,22 @@ def test_accepts_interactive_mode_and_rejects_unavailable_phonetics() raises:
     ):
         validate_foundation_mode(interactive_phonetic_options)
 
+    var empty_filter_phonetic: List[String] = [
+        "yuragi",
+        "--lang",
+        "zh",
+        "--filter",
+        "",
+    ]
+    var empty_filter_options = parse_options(empty_filter_phonetic^)
+    with assert_raises(
+        contains=(
+            "--lang zh phonetic matching awaits the Yomi integration; direct "
+            "matching works without --lang"
+        )
+    ):
+        validate_foundation_mode(empty_filter_options)
+
 
 def test_explain_mode_validation() raises:
     var interactive_args: List[String] = ["yuragi", "--explain"]

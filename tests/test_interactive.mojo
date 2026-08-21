@@ -35,6 +35,16 @@ def _multi_model(var candidates: List[Candidate]) raises -> _FinderModel:
     return _FinderModel(candidates^, options, matches^)
 
 
+def _seeded_model(
+    var candidates: List[Candidate], query: String
+) raises -> _FinderModel:
+    var args: List[String] = ["yuragi", "--query", query]
+    var options = parse_options(args^)
+    var seeded_query = String(options.query)
+    var matches = rank_picker_query(candidates, seeded_query, options)
+    return _FinderModel(candidates^, options, matches^)
+
+
 def test_typing_narrows_matches_and_counter() raises:
     var candidates = candidates_from_text("apple\nbanana\npear\n")
     var model = _model(candidates^)
@@ -46,6 +56,44 @@ def test_typing_narrows_matches_and_counter() raises:
     assert_equal(_match_count(model), 1)
     assert_equal(_total_count(model), 3)
     assert_equal(model.matches[0].text, "banana")
+
+
+def test_control_u_clears_query_and_restores_all_matches() raises:
+    var candidates = candidates_from_text("alpha\nbravo\ncharlie\n")
+    var model = _seeded_model(candidates^, String("br"))
+    assert_equal(_match_count(model), 1)
+
+    assert_false(
+        _handle_key(
+            model,
+            KeyEvent.character(String("u"), KeyEvent.CONTROL),
+        )
+    )
+    assert_equal(model.query, "")
+    assert_equal(_match_count(model), 3)
+
+
+def test_control_w_deletes_the_trailing_word() raises:
+    var candidates = candidates_from_text("alpha bravo\nalpha charlie\nsolo\n")
+    var model = _seeded_model(candidates^, String("alpha bravo"))
+    assert_false(
+        _handle_key(
+            model,
+            KeyEvent.character(String("w"), KeyEvent.CONTROL),
+        )
+    )
+    assert_equal(model.query, "alpha ")
+
+    var solo_candidates = candidates_from_text("alpha bravo\nalpha charlie\nsolo\n")
+    var solo_model = _seeded_model(solo_candidates^, String("solo"))
+    assert_false(
+        _handle_key(
+            solo_model,
+            KeyEvent.character(String("w"), KeyEvent.CONTROL),
+        )
+    )
+    assert_equal(solo_model.query, "")
+    assert_equal(_match_count(solo_model), 3)
 
 
 def test_selection_survives_refinement_by_candidate_id() raises:

@@ -179,6 +179,21 @@ def _erase_last_grapheme(mut text: String):
     text = shortened^
 
 
+def _delete_last_word(text: String) -> String:
+    """Delete trailing ASCII whitespace and the word before it."""
+    var end = text.byte_length()
+    var bytes = text.as_bytes()
+    while end > 0 and (
+        bytes[end - 1] == UInt8(ord(" ")) or bytes[end - 1] == UInt8(ord("\t"))
+    ):
+        end -= 1
+    while end > 0 and (
+        bytes[end - 1] != UInt8(ord(" ")) and bytes[end - 1] != UInt8(ord("\t"))
+    ):
+        end -= 1
+    return String(text[byte=:end])
+
+
 def _adopt_cursor_id(mut model: _FinderModel):
     if not model.cursor.selected:
         model.selected_source_index = None
@@ -246,6 +261,14 @@ def _handle_key(mut model: _FinderModel, key: KeyEvent) raises -> Bool:
     elif key.code == KeyEvent.UP or _control_character(key, "p"):
         model.cursor.previous(len(model.matches))
         _adopt_cursor_id(model)
+    elif _control_character(key, "u"):
+        if model.query != "":
+            model.query = String()
+            _rerank(model)
+    elif _control_character(key, "w"):
+        if model.query != "":
+            model.query = _delete_last_word(model.query)
+            _rerank(model)
     elif key.code == KeyEvent.BACKSPACE:
         _erase_last_grapheme(model.query)
         _rerank(model)

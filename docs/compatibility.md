@@ -27,7 +27,8 @@ its first release. Each release names the exact compiler used to build it.
 
 ## Current CLI limitations
 
-- Standard input must be valid UTF-8 and is currently buffered in memory.
+- Standard input is buffered in memory and decoded lossily: each invalid UTF-8
+  byte becomes U+FFFD REPLACEMENT CHARACTER, matching fzf behavior.
 - `--filter ''` is implemented as identity selection.
 - Non-empty `--filter` queries rank candidates through the installed Hibana
   package.
@@ -46,5 +47,5 @@ validly supplied, `--help` wins over `--version`, independent of flag order.
 
 - `0`: success or an informational mode;
 - `1`: no match or nothing accepted;
-- `2`: usage or operational error, including input decoding;
+- `2`: usage or operational error, including standard-input I/O failures;
 - `130`: interactive abort.

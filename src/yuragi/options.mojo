@@ -49,9 +49,13 @@ struct Options(Copyable):
 
 
 def _set_language(mut options: Options, value: StringSlice) raises:
-    if options.has_language:
-        raise Error("--lang may be specified only once")
     var language = String(value)
+    if language == "all" or language == "plain":
+        raise Error(
+            "--lang ",
+            language,
+            " is reserved to match yuru's register and is not yet supported",
+        )
     if (
         language != "auto"
         and language != "zh"
@@ -67,23 +71,17 @@ def _set_language(mut options: Options, value: StringSlice) raises:
     options.language = language^
 
 
-def _set_filter(mut options: Options, value: StringSlice) raises:
-    if options.has_filter:
-        raise Error("--filter may be specified only once")
+def _set_filter(mut options: Options, value: StringSlice):
     options.has_filter = True
     options.query = String(value)
 
 
-def _set_query(mut options: Options, value: StringSlice) raises:
-    if options.has_query:
-        raise Error("--query may be specified only once")
+def _set_query(mut options: Options, value: StringSlice):
     options.has_query = True
     options.query = String(value)
 
 
 def _set_limit(mut options: Options, value: StringSlice) raises:
-    if options.has_limit:
-        raise Error("--limit may be specified only once")
     var limit: Int
     try:
         limit = Int(String(value))
@@ -113,45 +111,31 @@ def _set_limit(mut options: Options, value: StringSlice) raises:
     options.limit = limit
 
 
-def _set_read0(mut options: Options) raises:
-    if options.read0:
-        raise Error("--read0 may be specified only once")
+def _set_read0(mut options: Options):
     options.read0 = True
 
 
-def _set_print0(mut options: Options) raises:
-    if options.print0:
-        raise Error("--print0 may be specified only once")
+def _set_print0(mut options: Options):
     options.print0 = True
 
 
-def _set_explain(mut options: Options) raises:
-    if options.explain:
-        raise Error("--explain may be specified only once")
+def _set_explain(mut options: Options):
     options.explain = True
 
 
-def _set_select_1(mut options: Options) raises:
-    if options.select_1:
-        raise Error("--select-1 may be specified only once")
+def _set_select_1(mut options: Options):
     options.select_1 = True
 
 
-def _set_exit_0(mut options: Options) raises:
-    if options.exit_0:
-        raise Error("--exit-0 may be specified only once")
+def _set_exit_0(mut options: Options):
     options.exit_0 = True
 
 
-def _set_multi(mut options: Options) raises:
-    if options.multi:
-        raise Error("--multi may be specified only once")
+def _set_multi(mut options: Options):
     options.multi = True
 
 
-def _set_case_mode(mut options: Options, case_mode: CaseMode) raises:
-    if options.has_case_override:
-        raise Error("case sensitivity may be specified only once")
+def _set_case_mode(mut options: Options, case_mode: CaseMode):
     options.has_case_override = True
     options.case_mode = case_mode
 
@@ -184,6 +168,8 @@ def parse_options(args: List[String]) raises -> Options:
             _set_filter(options, args[index])
         elif argument.startswith("--filter="):
             _set_filter(options, argument.removeprefix("--filter="))
+        elif argument.startswith("-f") and argument.byte_length() > 2:
+            _set_filter(options, argument.removeprefix("-f"))
         elif argument == "--query" or argument == "-q":
             if index + 1 >= len(args):
                 raise Error("--query requires a query")
@@ -191,6 +177,8 @@ def parse_options(args: List[String]) raises -> Options:
             _set_query(options, args[index])
         elif argument.startswith("--query="):
             _set_query(options, argument.removeprefix("--query="))
+        elif argument.startswith("-q") and argument.byte_length() > 2:
+            _set_query(options, argument.removeprefix("-q"))
         elif argument == "--limit":
             if index + 1 >= len(args):
                 raise Error("--limit requires a positive candidate count")
@@ -219,7 +207,7 @@ def parse_options(args: List[String]) raises -> Options:
             _set_multi(options)
         elif argument == "--ignore-case" or argument == "-i":
             _set_case_mode(options, CaseMode.IGNORE_ASCII)
-        elif argument == "--no-ignore-case":
+        elif argument == "--no-ignore-case" or argument == "+i":
             _set_case_mode(options, CaseMode.EXACT)
         else:
             raise Error("unknown argument '", argument, "' (try 'yuragi --help')")
@@ -250,7 +238,7 @@ def usage() -> String:
         "      --limit N         emit at most N best-ranked candidates\n"
         "      --lang LANGUAGE   phonetic language hint (default: auto)\n"
         "  -i, --ignore-case     match case-insensitively (ASCII)\n"
-        "      --no-ignore-case  match case-sensitively\n"
+        "  +i, --no-ignore-case  match case-sensitively\n"
         "      --read0           read NUL-delimited candidates from standard input\n"
         "      --print0          write NUL-delimited candidates to standard output\n"
         "      --explain         print rank, score, key kind, and match positions\n"
@@ -265,6 +253,7 @@ def usage() -> String:
         "and are usage errors with --filter.\n"
         "Keybindings: Enter accepts; TAB marks and moves down; Shift-TAB marks\n"
         "and moves up in --multi mode. Both are inert without --multi.\n"
+        "Ctrl-U clears the query; Ctrl-W deletes the trailing word.\n"
         "\n"
         "Invalid options exit before informational modes. If both --help and\n"
         "--version are validly supplied, --help wins.\n"

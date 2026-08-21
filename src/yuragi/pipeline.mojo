@@ -75,11 +75,7 @@ def validate_foundation_mode(options: Options) raises:
             "--explain requires a non-empty --filter query; an empty query "
             "performs no matching"
         )
-    if (
-        (not options.has_filter or matching_backend_required(options))
-        and options.has_language
-        and options.language != "auto"
-    ):
+    if options.has_language and options.language != "auto":
         raise Error(
             "--lang ",
             options.language,

@@ -105,7 +105,7 @@ if ! grep -Fxq \
   exit 1
 fi
 if ! grep -Fxq \
-  '      --no-ignore-case  match case-sensitively' \
+  '  +i, --no-ignore-case  match case-sensitively' \
   <<<"$help_text"; then
   echo "--no-ignore-case help description is not column-aligned" >&2
   exit 1
@@ -162,22 +162,20 @@ set +e
   >"$test_dir/stdout" 2>"$test_dir/stderr"
 exit_code=$?
 set -e
-if [[ $exit_code -ne 2 ]] || \
-  ! grep -Fxq 'yuragi: --lang may be specified only once' "$test_dir/stderr"; then
-  echo "duplicate --lang must be rejected consistently before --help" >&2
+if [[ $exit_code -ne 0 ]] || [[ -s "$test_dir/stderr" ]] || \
+  [[ "$(<"$test_dir/stdout")" != "$help_text" ]]; then
+  echo "last-wins --lang parsing must allow --help to win" >&2
   exit 1
 fi
 
-set +e
-.pixi/bin/yuragi --filter x --ignore-case --no-ignore-case \
-  >"$test_dir/stdout" 2>"$test_dir/stderr"
-exit_code=$?
-set -e
-if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
-  ! grep -Fxq \
-    'yuragi: case sensitivity may be specified only once' \
-    "$test_dir/stderr"; then
-  echo "conflicting case flags must produce their exact diagnostic" >&2
+printf 'read\n' >"$test_dir/last-case-wins-expected"
+printf 'READ\nread\n' | \
+  .pixi/bin/yuragi --filter re --ignore-case --no-ignore-case \
+  >"$test_dir/last-case-wins-actual" 2>"$test_dir/last-case-wins-stderr"
+if ! cmp -s \
+  "$test_dir/last-case-wins-expected" "$test_dir/last-case-wins-actual" || \
+  [[ -s "$test_dir/last-case-wins-stderr" ]]; then
+  echo "the last case-sensitivity flag did not win" >&2
   exit 1
 fi
 
@@ -232,6 +230,15 @@ printf 'apple\nbanana\nbar\n' | .pixi/bin/yuragi --filter ba \
   >"$test_dir/ranked-actual" 2>"$test_dir/ranked-stderr"
 if ! cmp -s "$test_dir/ranked-expected" "$test_dir/ranked-actual"; then
   echo "ranked filtering produced unexpected candidates or ordering" >&2
+  exit 1
+fi
+
+printf 'banana\n' >"$test_dir/attached-filter-expected"
+printf 'apple\nbanana\n' | .pixi/bin/yuragi -fba \
+  >"$test_dir/attached-filter-actual" 2>"$test_dir/attached-filter-stderr"
+if ! cmp -s \
+  "$test_dir/attached-filter-expected" "$test_dir/attached-filter-actual"; then
+  echo "attached -f query did not select banana" >&2
   exit 1
 fi
 
@@ -379,6 +386,19 @@ if ! grep -Fxq \
 fi
 
 set +e
+.pixi/bin/yuragi --lang zh --filter '' </dev/null \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: --lang zh phonetic matching awaits the Yomi integration; direct matching works without --lang' \
+    "$test_dir/stderr"; then
+  echo "empty-query phonetic filtering must explain the Yomi gate" >&2
+  exit 1
+fi
+
+set +e
 .pixi/bin/yuragi --filter ba --limit 0 \
   >"$test_dir/stdout" 2>"$test_dir/stderr"
 exit_code=$?
@@ -420,22 +440,20 @@ if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
   exit 1
 fi
 
-set +e
-printf '\xff\n' | .pixi/bin/yuragi --filter '' \
-  >"$test_dir/stdout" 2>"$test_dir/stderr"
-exit_code=$?
-set -e
-if [[ $exit_code -ne 2 ]]; then
-  echo "invalid UTF-8 input must exit 2 (got $exit_code)" >&2
+printf 'caf\xef\xbf\xbd\napple\n' >"$test_dir/lossy-utf8-expected"
+printf 'caf\xff\napple\n' | .pixi/bin/yuragi --filter '' \
+  >"$test_dir/lossy-utf8-actual" 2>"$test_dir/lossy-utf8-stderr"
+if ! cmp -s "$test_dir/lossy-utf8-expected" "$test_dir/lossy-utf8-actual" || \
+  [[ -s "$test_dir/lossy-utf8-stderr" ]]; then
+  echo "invalid UTF-8 bytes were not replaced with U+FFFD" >&2
   exit 1
 fi
-if [[ -s "$test_dir/stdout" ]]; then
-  echo "invalid UTF-8 input produced candidate output" >&2
-  exit 1
-fi
-if ! grep -Fq 'yuragi: input error:' "$test_dir/stderr" || \
-  ! grep -Fq 'invalid UTF-8' "$test_dir/stderr"; then
-  echo "invalid UTF-8 input did not produce a useful diagnostic" >&2
+
+printf 'caf\xff\napple\n' | .pixi/bin/yuragi --filter a \
+  >"$test_dir/lossy-filter-actual" 2>"$test_dir/lossy-filter-stderr"
+if ! grep -Fxq 'apple' "$test_dir/lossy-filter-actual" || \
+  [[ -s "$test_dir/lossy-filter-stderr" ]]; then
+  echo "lossy UTF-8 input did not remain filterable" >&2
   exit 1
 fi
 
