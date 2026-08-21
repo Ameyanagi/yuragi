@@ -22,6 +22,8 @@ test-interactive = { cmd = "bash scripts/test-interactive.sh", depends-on = ["bu
 yuragi = { cmd = ".pixi/bin/yuragi", depends-on = ["build"], description = "Run the local Yuragi executable" }
 
 [dependencies]
+mojo-hibana = "*"
+mojo-mojotui = "*"
 mojo = "==1.0.0"
 rattler-build = ">=0.74,<0.75"
 
@@ -30,6 +32,3 @@ rattler-build = ">=0.74,<0.75"
 # channel only serves osx-arm64 today, so the dependency is scoped to the
 # platform it can resolve on; it moves to [dependencies] once hibana
 # publishes to a hosted channel for every supported platform.
-[target.osx-arm64.dependencies]
-mojo-hibana = "*"
-mojo-mojotui = "*"
