@@ -24,6 +24,7 @@ struct Options(Copyable):
     var explain: Bool
     var select_1: Bool
     var exit_0: Bool
+    var multi: Bool
     var help_requested: Bool
     var version_requested: Bool
 
@@ -42,6 +43,7 @@ struct Options(Copyable):
         self.explain = False
         self.select_1 = False
         self.exit_0 = False
+        self.multi = False
         self.help_requested = False
         self.version_requested = False
 
@@ -119,6 +121,12 @@ def _set_exit_0(mut options: Options) raises:
     options.exit_0 = True
 
 
+def _set_multi(mut options: Options) raises:
+    if options.multi:
+        raise Error("--multi may be specified only once")
+    options.multi = True
+
+
 def _set_case_mode(mut options: Options, case_mode: CaseMode) raises:
     if options.has_case_override:
         raise Error("case sensitivity may be specified only once")
@@ -133,6 +141,8 @@ def _validate_options(options: Options) raises:
         raise Error("--select-1 cannot be used with --filter")
     if options.has_filter and options.exit_0:
         raise Error("--exit-0 cannot be used with --filter")
+    if options.has_filter and options.multi:
+        raise Error("--multi cannot be used with --filter")
 
 
 def parse_options(args: List[String]) raises -> Options:
@@ -183,6 +193,8 @@ def parse_options(args: List[String]) raises -> Options:
             _set_select_1(options)
         elif argument == "--exit-0" or argument == "-0":
             _set_exit_0(options)
+        elif argument == "--multi" or argument == "-m":
+            _set_multi(options)
         elif argument == "--ignore-case" or argument == "-i":
             _set_case_mode(options, CaseMode.IGNORE_ASCII)
         elif argument == "--no-ignore-case":
@@ -212,6 +224,7 @@ def usage() -> String:
         "  -q, --query STR       seed the interactive prompt with STR\n"
         "  -1, --select-1        accept a sole initial match without the picker\n"
         "  -0, --exit-0          exit 1 on no initial matches without the picker\n"
+        "  -m, --multi           select multiple candidates with TAB/Shift-TAB\n"
         "      --limit N         emit at most N best-ranked candidates\n"
         "      --lang LANGUAGE   phonetic language hint (default: auto)\n"
         "  -i, --ignore-case     match case-insensitively (ASCII)\n"
@@ -224,9 +237,12 @@ def usage() -> String:
         "\n"
         "Interactive flag matrix: --query seeds the prompt; --select-1\n"
         "auto-accepts and prints a sole initial match; --exit-0 exits 1\n"
-        "immediately when the initial match set is empty. With --query, both\n"
-        "automation flags evaluate the seeded query. All three flags are\n"
-        "interactive-mode-only and are usage errors with --filter.\n"
+        "immediately when the initial match set is empty; --multi enables\n"
+        "marking multiple candidates. With --query, both automation flags\n"
+        "evaluate the seeded query. All four flags are interactive-mode-only\n"
+        "and are usage errors with --filter.\n"
+        "Keybindings: Enter accepts; TAB marks and moves down; Shift-TAB marks\n"
+        "and moves up in --multi mode. Both are inert without --multi.\n"
         "\n"
         "Invalid options exit before informational modes. If both --help and\n"
         "--version are validly supplied, --help wins.\n"

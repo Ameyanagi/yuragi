@@ -26,9 +26,9 @@ remains candidate data.
 
 ## Current foundation — implemented
 
-- Parse `--filter`, `--query`, `--select-1`, `--exit-0`, `--limit`, `--lang`,
-  `--read0`, `--print0`, `--help`, and `--version` without accepting ambiguous
-  positionals or duplicate selections.
+- Parse `--filter`, `--query`, `--select-1`, `--exit-0`, `--multi`, `--limit`,
+  `--lang`, `--read0`, `--print0`, `--help`, and `--version` without accepting
+  ambiguous positionals or duplicate selections.
 - Use Hibana smart ASCII case matching by default. `-i`/`--ignore-case` and
   `--no-ignore-case` are hard overrides that map directly to Hibana
   `CaseMode.IGNORE_ASCII` and `CaseMode.EXACT`.
@@ -50,8 +50,12 @@ remains candidate data.
 - Apply the interactive flag matrix before constructing the picker: `--query`
   seeds the prompt and initial ranking, `--select-1` accepts a sole initial
   match, and `--exit-0` exits 1 on an empty initial match set. The automation
-  flags compose and evaluate the seeded query; all three flags are usage errors
-  with `--filter`.
+  flags compose and evaluate the seeded query; `--multi` enables TAB/Shift-TAB
+  marking. All four flags are usage errors with `--filter`.
+- Store interactive marks as candidate source indices in mark order, independent
+  of the ranked view. Marks survive query refinement, render visibly with a
+  marked count, and resolve to newline- or NUL-framed output in source order;
+  Enter falls back to the cursor candidate when no marks exist.
 - Exit with code 1 and empty stdout when a non-empty query has no match.
   Invalid usage, unsupported modes, and input, operational, and internal
   failures exit 2. Exit 130 is active for interactive abort (the fzf/skim

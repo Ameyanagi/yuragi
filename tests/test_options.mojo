@@ -56,18 +56,26 @@ def test_interactive_query_and_automation_options() raises:
         "seed",
         "--select-1",
         "-0",
+        "-m",
     ]
     var options = parse_options(args^)
     assert_true(options.has_query)
     assert_equal(options.query, "seed")
     assert_true(options.select_1)
     assert_true(options.exit_0)
+    assert_true(options.multi)
 
-    var equals_args: List[String] = ["yuragi", "--query=equals", "-1"]
+    var equals_args: List[String] = [
+        "yuragi",
+        "--query=equals",
+        "-1",
+        "--multi",
+    ]
     var equals_options = parse_options(equals_args^)
     assert_true(equals_options.has_query)
     assert_equal(equals_options.query, "equals")
     assert_true(equals_options.select_1)
+    assert_true(equals_options.multi)
 
 
 def test_limit_equals_form() raises:
@@ -90,8 +98,15 @@ def test_help_and_version_text() raises:
         "  -q, --query STR       seed the interactive prompt with STR" in usage()
     )
     assert_true(
+        "  -m, --multi           select multiple candidates with TAB/Shift-TAB"
+        in usage()
+    )
+    assert_true(
         "Interactive flag matrix: --query seeds the prompt; --select-1" in usage()
     )
+    assert_true("TAB marks and moves down; Shift-TAB marks" in usage())
+    assert_true("and moves up in --multi mode" in usage())
+    assert_true("Both are inert without --multi" in usage())
     assert_equal(version_text(), "yuragi 0.0.0")
 
 
@@ -141,6 +156,10 @@ def test_rejects_duplicate_interactive_automation_options() raises:
     with assert_raises(contains="--exit-0 may be specified only once"):
         _ = parse_options(exit_args^)
 
+    var multi_args: List[String] = ["yuragi", "--multi", "-m"]
+    with assert_raises(contains="--multi may be specified only once"):
+        _ = parse_options(multi_args^)
+
 
 def test_rejects_filter_with_interactive_only_flags() raises:
     var query_args: List[String] = [
@@ -161,12 +180,17 @@ def test_rejects_filter_with_interactive_only_flags() raises:
     with assert_raises(contains="--exit-0 cannot be used with --filter"):
         _ = parse_options(exit_args^)
 
+    var multi_args: List[String] = ["yuragi", "-f", "x", "--multi"]
+    with assert_raises(contains="--multi cannot be used with --filter"):
+        _ = parse_options(multi_args^)
+
 
 def test_case_mode_defaults_to_smart_ascii() raises:
     var args: List[String] = ["yuragi"]
     var options = parse_options(args^)
     assert_true(options.case_mode == CaseMode.SMART_ASCII)
     assert_false(options.has_case_override)
+    assert_false(options.multi)
 
 
 def test_case_mode_overrides() raises:

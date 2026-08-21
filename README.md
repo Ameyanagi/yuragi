@@ -92,25 +92,33 @@ ls | yuragi
 
 Candidate input still comes only from standard input. The picker writes its UI
 directly to the controlling terminal, while stdout remains reserved for the
-accepted candidate. Its single fixed keymap has no `--bind` DSL:
+accepted candidates. Its single fixed keymap has no `--bind` DSL:
 
 - `--query STR`/`-q STR` pre-fills the prompt and computes its initial ranking.
 - `--select-1`/`-1` prints and accepts a sole initial match without opening the
   picker.
 - `--exit-0`/`-0` exits with status 1 and empty stdout when the initial query
   has no matches, without opening the picker.
+- `--multi`/`-m` enables marking several candidates. Enter accepts every mark
+  in source order, or the cursor candidate when nothing is marked.
 
 The two automation flags compose with each other and evaluate the `--query`
-seed when supplied. All three flags are interactive-only and are usage errors
+seed when supplied. All four flags are interactive-only and are usage errors
 with `--filter`.
 
 | Keys | Action |
 | --- | --- |
-| Enter | Accept the cursor candidate |
+| Enter | Accept marks, or the cursor candidate when no marks exist |
 | Esc, Ctrl-C | Abort |
 | Down, Ctrl-N | Move to the next candidate |
 | Up, Ctrl-P | Move to the previous candidate |
+| TAB | With `--multi`, toggle the cursor mark and move down |
+| Shift-TAB | With `--multi`, toggle the cursor mark and move up |
 | Backspace | Erase the last query grapheme |
+
+Marks follow candidate source identities, so they survive query refinement
+even while a marked candidate is absent from the current matches. TAB and
+Shift-TAB are inert without `--multi`.
 
 Exit codes are `0` for a successful match or acceptance, `1` when there is no
 match or nothing to accept, `2` for usage or operational errors, and `130` for

@@ -7,8 +7,12 @@ from yuragi.interactive import (
     FinderOutcome,
     FinderSession,
     _FinderModel,
+    _counter_text,
     _handle_key,
+    _is_marked,
+    _item_line,
     _match_count,
+    _marked_count,
     _selected_id,
     _total_count,
 )
@@ -18,6 +22,14 @@ from yuragi.pipeline import rank_picker_query
 
 def _model(var candidates: List[Candidate]) raises -> _FinderModel:
     var options = Options()
+    var seeded_query = String(options.query)
+    var matches = rank_picker_query(candidates, seeded_query, options)
+    return _FinderModel(candidates^, options, matches^)
+
+
+def _multi_model(var candidates: List[Candidate]) raises -> _FinderModel:
+    var args: List[String] = ["yuragi", "--multi"]
+    var options = parse_options(args^)
     var seeded_query = String(options.query)
     var matches = rank_picker_query(candidates, seeded_query, options)
     return _FinderModel(candidates^, options, matches^)
@@ -60,6 +72,118 @@ def test_enter_accepts_exact_cursor_candidate() raises:
     assert_equal(len(selected), 1)
     assert_equal(selected[0].source_index, 1)
     assert_equal(selected[0].text, "second")
+
+
+def test_multi_tab_marks_and_moves_down() raises:
+    var candidates = candidates_from_text("first\nsecond\nthird\n")
+    var model = _multi_model(candidates^)
+
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.TAB)))
+    assert_true(_is_marked(model, 0))
+    assert_equal(_marked_count(model), 1)
+    assert_true(_selected_id(model).value() == 1)
+    assert_true(model.cursor.selected.value() == UInt(1))
+
+
+def test_multi_shift_tab_marks_and_moves_up() raises:
+    var candidates = candidates_from_text("first\nsecond\nthird\n")
+    var model = _multi_model(candidates^)
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.DOWN)))
+
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.TAB, KeyEvent.SHIFT)))
+    assert_true(_is_marked(model, 1))
+    assert_equal(_marked_count(model), 1)
+    assert_true(_selected_id(model).value() == 0)
+    assert_true(model.cursor.selected.value() == UInt(0))
+
+
+def test_multi_toggling_twice_unmarks() raises:
+    var candidates = candidates_from_text("only\n")
+    var model = _multi_model(candidates^)
+
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.TAB)))
+    assert_true(_is_marked(model, 0))
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.TAB)))
+    assert_false(_is_marked(model, 0))
+    assert_equal(_marked_count(model), 0)
+
+
+def test_multi_render_shows_marker_and_marked_count() raises:
+    var candidates = candidates_from_text("first\nsecond\n")
+    var model = _multi_model(candidates^)
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.TAB)))
+
+    var marked_line = _item_line(model, 0)
+    var unmarked_line = _item_line(model, 1)
+    assert_equal(marked_line.spans[0].content, "* ")
+    assert_equal(unmarked_line.spans[0].content, "  ")
+    assert_equal(_counter_text(model), "2/2 (1)")
+
+
+def test_multi_marks_survive_query_refinement() raises:
+    var candidates = candidates_from_text("apple\nbanana\n")
+    var model = _multi_model(candidates^)
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.TAB)))
+
+    assert_false(_handle_key(model, KeyEvent.character(String("b"))))
+    assert_equal(_match_count(model), 1)
+    assert_equal(model.matches[0].text, "banana")
+    assert_true(_is_marked(model, 0))
+    assert_equal(_counter_text(model), "1/2 (1)")
+
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.BACKSPACE)))
+    assert_equal(_match_count(model), 2)
+    assert_true(_is_marked(model, 0))
+    var restored_line = _item_line(model, 0)
+    assert_equal(restored_line.spans[0].content, "* ")
+
+
+def test_multi_enter_returns_reverse_marks_in_source_order() raises:
+    var candidates = candidates_from_text("first\nsecond\nthird\n")
+    var args: List[String] = ["yuragi", "-m"]
+    var session = FinderSession(candidates^, parse_options(args^))
+    assert_false(_handle_key(session._model, KeyEvent.named(KeyEvent.DOWN)))
+    assert_false(_handle_key(session._model, KeyEvent.named(KeyEvent.DOWN)))
+    assert_false(_handle_key(session._model, KeyEvent.named(KeyEvent.TAB)))
+    assert_false(_handle_key(session._model, KeyEvent.named(KeyEvent.UP)))
+    assert_false(_handle_key(session._model, KeyEvent.named(KeyEvent.UP)))
+    assert_false(_handle_key(session._model, KeyEvent.named(KeyEvent.TAB)))
+
+    assert_equal(session._model.marked_source_indices[0], 2)
+    assert_equal(session._model.marked_source_indices[1], 0)
+    assert_true(_handle_key(session._model, KeyEvent.named(KeyEvent.ENTER)))
+    var selected = session.selection()
+    assert_equal(len(selected), 2)
+    assert_equal(selected[0].source_index, 0)
+    assert_equal(selected[0].text, "first")
+    assert_equal(selected[1].source_index, 2)
+    assert_equal(selected[1].text, "third")
+
+
+def test_multi_enter_without_marks_accepts_cursor_candidate() raises:
+    var candidates = candidates_from_text("first\nsecond\n")
+    var args: List[String] = ["yuragi", "-m"]
+    var session = FinderSession(candidates^, parse_options(args^))
+    assert_false(_handle_key(session._model, KeyEvent.named(KeyEvent.DOWN)))
+    assert_true(_handle_key(session._model, KeyEvent.named(KeyEvent.ENTER)))
+
+    var selected = session.selection()
+    assert_equal(len(selected), 1)
+    assert_equal(selected[0].source_index, 1)
+    assert_equal(selected[0].text, "second")
+
+
+def test_tab_without_multi_is_inert() raises:
+    var candidates = candidates_from_text("first\nsecond\n")
+    var model = _model(candidates^)
+
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.TAB)))
+    assert_equal(_marked_count(model), 0)
+    assert_true(_selected_id(model).value() == 0)
+    assert_true(model.cursor.selected.value() == UInt(0))
+    var first_line = _item_line(model, 0)
+    assert_equal(first_line.spans[0].content, "first")
+    assert_equal(_counter_text(model), "2/2")
 
 
 def test_escape_aborts_with_empty_selection() raises:

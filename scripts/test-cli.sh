@@ -81,6 +81,12 @@ if ! grep -Fxq \
   exit 1
 fi
 if ! grep -Fxq \
+  '  -m, --multi           select multiple candidates with TAB/Shift-TAB' \
+  <<<"$help_text"; then
+  echo "--multi help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
   '      --lang LANGUAGE   phonetic language hint (default: auto)' \
   <<<"$help_text"; then
   echo "--lang help description is not column-aligned" >&2
@@ -174,11 +180,11 @@ if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
 fi
 
 printf 'banana\n' >"$test_dir/select-1-expected"
-printf 'banana\n' | .pixi/bin/yuragi --select-1 \
+printf 'banana\n' | .pixi/bin/yuragi --select-1 --multi \
   >"$test_dir/select-1-actual" 2>"$test_dir/select-1-stderr"
 if ! cmp -s "$test_dir/select-1-expected" "$test_dir/select-1-actual" || \
   [[ -s "$test_dir/select-1-stderr" ]]; then
-  echo "--select-1 did not accept the sole initial match without a TTY" >&2
+  echo "--select-1 --multi did not accept a sole initial match without a TTY" >&2
   exit 1
 fi
 
@@ -203,6 +209,19 @@ if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/query-filter-stdout" ]] || \
     'yuragi: --query cannot be used with --filter' \
     "$test_dir/query-filter-stderr"; then
   echo "--query with --filter must produce its exact usage error" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --multi --filter x \
+  >"$test_dir/multi-filter-stdout" 2>"$test_dir/multi-filter-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/multi-filter-stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: --multi cannot be used with --filter' \
+    "$test_dir/multi-filter-stderr"; then
+  echo "--multi with --filter must produce its exact usage error" >&2
   exit 1
 fi
 

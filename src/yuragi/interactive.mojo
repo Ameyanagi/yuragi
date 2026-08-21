@@ -62,7 +62,7 @@ struct _FinderModel(Copyable):
     var matches: MojoList[RankedCandidate]
     var cursor: ListState
     var selected_source_index: Optional[Int]
-    var accepted_source_index: Optional[Int]
+    var marked_source_indices: MojoList[Int]
     var outcome: FinderOutcome
 
     def __init__(
@@ -75,7 +75,7 @@ struct _FinderModel(Copyable):
         self.query = String(options.query)
         self.cursor = ListState()
         self.selected_source_index = None
-        self.accepted_source_index = None
+        self.marked_source_indices = MojoList[Int]()
         self.outcome = FinderOutcome.ABORTED
         if len(matches) > 0:
             self.cursor.select(UInt(0), len(matches))
@@ -94,6 +94,78 @@ def _total_count(model: _FinderModel) -> Int:
 
 def _selected_id(model: _FinderModel) -> Optional[Int]:
     return model.selected_source_index.copy()
+
+
+def _marked_count(model: _FinderModel) -> Int:
+    return len(model.marked_source_indices)
+
+
+def _contains_source_index(source_indices: MojoList[Int], source_index: Int) -> Bool:
+    for index in range(len(source_indices)):
+        if source_indices[index] == source_index:
+            return True
+    return False
+
+
+def _is_marked(model: _FinderModel, source_index: Int) -> Bool:
+    return _contains_source_index(model.marked_source_indices, source_index)
+
+
+def _toggled_mark_order(
+    source_indices: MojoList[Int], source_index: Int
+) -> MojoList[Int]:
+    """Return candidate IDs in mark order after toggling one candidate ID."""
+    var toggled = source_indices.copy()
+    for index in range(len(toggled)):
+        if toggled[index] == source_index:
+            _ = toggled.pop(index)
+            return toggled^
+    toggled.append(source_index)
+    return toggled^
+
+
+def _toggle_cursor_mark(mut model: _FinderModel):
+    if not model.selected_source_index:
+        return
+    model.marked_source_indices = _toggled_mark_order(
+        model.marked_source_indices,
+        model.selected_source_index.value(),
+    )
+
+
+def _accepted_source_indices(model: _FinderModel) -> MojoList[Int]:
+    """Resolve accepted candidate IDs while retaining mark order internally."""
+    if model.options.multi and len(model.marked_source_indices) > 0:
+        return model.marked_source_indices.copy()
+    var accepted = MojoList[Int]()
+    if model.selected_source_index:
+        accepted.append(model.selected_source_index.value())
+    return accepted^
+
+
+def _resolved_selection(model: _FinderModel) -> MojoList[Candidate]:
+    """Resolve accepted IDs to copied candidates in ascending source order."""
+    var selected = MojoList[Candidate]()
+    if model.outcome != FinderOutcome.ACCEPTED:
+        return selected^
+
+    var remaining = _accepted_source_indices(model)
+    while len(remaining) > 0:
+        var earliest = 0
+        for index in range(1, len(remaining)):
+            if remaining[index] < remaining[earliest]:
+                earliest = index
+        var accepted_id = remaining.pop(earliest)
+        for candidate_index in range(len(model.candidates)):
+            if model.candidates[candidate_index].source_index == accepted_id:
+                selected.append(
+                    Candidate(
+                        accepted_id,
+                        String(model.candidates[candidate_index].text),
+                    )
+                )
+                break
+    return selected^
 
 
 def _erase_last_grapheme(mut text: String):
@@ -151,12 +223,22 @@ def _control_character(key: KeyEvent, text: StringSlice) -> Bool:
 def _handle_key(mut model: _FinderModel, key: KeyEvent) raises -> Bool:
     if key.code == KeyEvent.ESCAPE or _control_character(key, "c"):
         model.outcome = FinderOutcome.ABORTED
-        model.accepted_source_index = None
         return True
     if key.code == KeyEvent.ENTER:
         model.outcome = FinderOutcome.ACCEPTED
-        model.accepted_source_index = model.selected_source_index.copy()
         return True
+    if (
+        key.code == KeyEvent.TAB
+        and model.options.multi
+        and (key.modifiers == KeyEvent.NO_MODIFIERS or key.modifiers == KeyEvent.SHIFT)
+    ):
+        _toggle_cursor_mark(model)
+        if key.modifiers == KeyEvent.SHIFT:
+            model.cursor.previous(len(model.matches))
+        else:
+            model.cursor.next(len(model.matches))
+        _adopt_cursor_id(model)
+        return False
     if key.code == KeyEvent.DOWN or _control_character(key, "n"):
         model.cursor.next(len(model.matches))
         _adopt_cursor_id(model)
@@ -174,28 +256,44 @@ def _handle_key(mut model: _FinderModel, key: KeyEvent) raises -> Bool:
     return False
 
 
-def _items(model: _FinderModel) raises -> MojoList[ListItem]:
-    var items = MojoList[ListItem](capacity=len(model.matches))
+def _item_line(model: _FinderModel, index: Int) raises -> Line:
     var patch = StylePatch(
         foreground=Color.indexed(6),
         add_modifiers=Style.BOLD,
     )
+    var line = Line.from_text(model.matches[index].text.copy())
+    if model.query != "":
+        line = Line.highlighted(
+            model.matches[index].text.copy(),
+            model.matches[index].positions,
+            patch,
+        )
+    if not model.options.multi:
+        return line^
+
+    var marker = String("  ")
+    if _is_marked(model, model.matches[index].source_index):
+        marker = String("* ")
+    var marked_line = Line.from_text(marker^)
+    for span_index in range(len(line.spans)):
+        marked_line.append(line.spans[span_index])
+    return marked_line^
+
+
+def _items(model: _FinderModel) raises -> MojoList[ListItem]:
+    var items = MojoList[ListItem](capacity=len(model.matches))
     for index in range(len(model.matches)):
-        if model.query == "":
-            items.append(
-                ListItem.from_line(Line.from_text(model.matches[index].text.copy()))
-            )
-        else:
-            items.append(
-                ListItem.from_line(
-                    Line.highlighted(
-                        model.matches[index].text.copy(),
-                        model.matches[index].positions,
-                        patch,
-                    )
-                )
-            )
+        items.append(ListItem.from_line(_item_line(model, index)))
     return items^
+
+
+def _counter_text(model: _FinderModel) -> String:
+    var counter = String(_match_count(model)) + "/" + String(_total_count(model))
+    if model.options.multi:
+        counter += " ("
+        counter += String(_marked_count(model))
+        counter += ")"
+    return counter^
 
 
 struct _FinderApplication(Application, Copyable):
@@ -230,9 +328,7 @@ struct _FinderApplication(Application, Copyable):
             buffer,
         )
         render_line(
-            Line.from_text(
-                String(_match_count(model)) + "/" + String(_total_count(model))
-            ),
+            Line.from_text(_counter_text(model)),
             regions[1],
             buffer,
         )
@@ -350,20 +446,5 @@ struct FinderSession:
         return self._model.outcome.copy()
 
     def selection(self) -> MojoList[Candidate]:
-        """Return the accepted cursor candidate, or an empty list after abort."""
-        var selected = MojoList[Candidate]()
-        if self._model.outcome != FinderOutcome.ACCEPTED:
-            return selected^
-        if not self._model.accepted_source_index:
-            return selected^
-        var accepted_id = self._model.accepted_source_index.value()
-        for index in range(len(self._model.candidates)):
-            if self._model.candidates[index].source_index == accepted_id:
-                selected.append(
-                    Candidate(
-                        accepted_id,
-                        String(self._model.candidates[index].text),
-                    )
-                )
-                break
-        return selected^
+        """Return accepted candidates in source order, or empty after abort."""
+        return _resolved_selection(self._model)
