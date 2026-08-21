@@ -17,14 +17,28 @@ build:
 requirements:
   build:
     - mojo-compiler =1.0.0
+    - mojo-hibana
+    - mojo-mojotui
   host:
     - mojo-compiler =1.0.0
+    - mojo-hibana
+    - mojo-mojotui
   run:
     - ${{ pin_compatible('mojo-compiler') }}
 
 tests:
   - script:
-      - yuragi
+      - printf 'yuragi 0.0.0\n' > expected-version.txt
+      - yuragi --version > actual-version.txt
+      - cmp expected-version.txt actual-version.txt
+      - printf '北京大学\r\n\r\nnotes\r' > candidates.txt
+      - printf '北京大学\n\nnotes\r\n' > expected.txt
+      - yuragi --filter '' < candidates.txt > actual.txt
+      - cmp expected.txt actual.txt
+      - printf 'apple\nbanana\n' > ranked-input.txt
+      - printf 'banana\n' > ranked-expected.txt
+      - yuragi --filter ba < ranked-input.txt > ranked-actual.txt
+      - cmp ranked-expected.txt ranked-actual.txt
 
 about:
   homepage: https://github.com/Ameyanagi/yuragi

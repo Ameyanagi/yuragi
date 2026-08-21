@@ -8,6 +8,11 @@ Thanks for helping build Yuragi.
 2. Run `pixi install --locked`.
 3. Run `pixi run check` before opening a pull request.
 
+`pixi run check` formats, runs all TestSuite files, builds the executable with
+warnings as errors, and exercises stdin/stdout/error behavior through the
+compiled process. Use `pixi run package` when changing the recipe, executable
+linkage, or installed CLI contract.
+
 Use `pixi run format` to format Mojo sources. Do not edit `pixi.lock` directly;
 update dependencies through Pixi and commit the resulting lock change.
 
@@ -23,6 +28,9 @@ update dependencies through Pixi and commit the resulting lock change.
 - Update the changelog and compatibility notes for user-visible changes.
 - Benchmark performance work with checked-in methodology; do not add unsupported
   superiority claims.
+- Read `PLAN.md` before adding Moji, Hibana, Yomi, or MojoTUI. A dependency is
+  accepted only after its documented integration gate has evidence and an
+  installable version; sibling-source imports are not a release strategy.
 
 ## Public contracts
 

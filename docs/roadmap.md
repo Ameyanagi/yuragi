@@ -2,30 +2,44 @@
 
 ## v0.1 — Foundation
 
-- accept candidates on standard input and provide deterministic noninteractive --filter output using CJK phonetic representations before adding an interactive terminal UI.
-- Define the smallest useful public API and its invariants.
-- Add unit, reference-value, and property/invariant coverage.
-- Build and test the precompiled package on supported targets.
+- Stabilize newline-delimited UTF-8 stdin/stdout and CLI error contracts.
+- Integrate pinned Moji text views and transformed-to-source mappings.
+- Integrate pinned Hibana deterministic scoring, positions, and stable ranking.
+- Integrate pinned Yomi phonetic representations for `auto`, `zh`, `ja`, and
+  `ko` without losing source ranges.
+- Make `printf "北京大学\nnotes\n" | yuragi --lang zh --filter bjdx` emit the
+  correct original candidate.
+- Add unit, reference-value, invariant, installed-package, and executable CLI
+  coverage on every supported target.
+- Build and test the Conda application package from a clean source archive.
+
+The options/ingestion/output foundation is implemented. Non-empty matching is
+still dependency-gated; see `PLAN.md` for entry criteria and work order.
 
 ## v0.2 — Usability
 
-- Add ergonomic APIs only after v0.1 usage demonstrates repeated friction.
-- Expand examples and integration fixtures.
-- Publish the first modular-community recipe when the package is useful alone.
+- Add interactive selection through MojoTUI without creating a second search
+  pipeline.
+- Add preview, configuration, and cancellation around the v0.1 core.
+- Expand integration fixtures and publish shell usage guidance.
 
 ## v0.3 — Performance
 
-- Add reproducible benchmarks and representative datasets.
-- Optimize measured bottlenecks without weakening correctness or API clarity.
-- Add SIMD or specialized backends only behind the same semantic contract.
+- Add reproducible end-to-end benchmarks and representative CJK datasets.
+- Add bounded-memory ingestion or incremental top-K when measurements require
+  it.
+- Optimize measured orchestration bottlenecks without moving Hibana, Yomi, or
+  Moji responsibilities into the application.
 
 ## v1.0 — Stability
 
-- Document every public symbol and error contract.
+- Document every CLI, configuration, output, and error contract.
 - Provide a compatibility and deprecation policy.
 - Support the declared OS and architecture matrix in CI.
-- Require downstream proof from at least one independent consumer.
+- Require proof from shell and editor integrations.
 
 ## Not planned
 
-Reusable fuzzy algorithms, Unicode primitives, phonetic tables, and terminal widgets belong in their owning libraries rather than this application.
+Reusable fuzzy algorithms, Unicode primitives, phonetic tables, terminal
+widgets, a public library API, filesystem indexing, and a GUI toolkit belong in
+their owning projects or later applications.

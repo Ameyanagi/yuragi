@@ -1,0 +1,459 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+test_dir="$(mktemp -d)"
+trap 'rm -rf -- "$test_dir"' EXIT
+
+printf 'first\r\n\nlast\r' >"$test_dir/input"
+printf 'first\n\nlast\r\n' >"$test_dir/expected"
+.pixi/bin/yuragi --filter '' \
+  <"$test_dir/input" >"$test_dir/actual" 2>"$test_dir/stderr"
+if ! cmp -s "$test_dir/expected" "$test_dir/actual"; then
+  echo "empty-query CLI output changed ordering or record delimiters" >&2
+  exit 1
+fi
+
+printf 'a\nb\0c\0' >"$test_dir/nul-round-trip-input"
+printf 'a\nb\0c\0' >"$test_dir/nul-round-trip-expected"
+.pixi/bin/yuragi --read0 --print0 --filter '' \
+  <"$test_dir/nul-round-trip-input" >"$test_dir/nul-round-trip-actual" \
+  2>"$test_dir/nul-round-trip-stderr"
+if ! cmp -s \
+  "$test_dir/nul-round-trip-expected" "$test_dir/nul-round-trip-actual"; then
+  echo "NUL framing did not preserve a newline inside a candidate" >&2
+  exit 1
+fi
+
+printf 'banana\0' >"$test_dir/print0-expected"
+printf 'apple\nbanana\n' | .pixi/bin/yuragi --filter ba --print0 \
+  >"$test_dir/print0-actual" 2>"$test_dir/print0-stderr"
+if ! cmp -s "$test_dir/print0-expected" "$test_dir/print0-actual"; then
+  echo "--print0 did not NUL-terminate ranked output" >&2
+  exit 1
+fi
+
+printf 'banana\n' >"$test_dir/read0-expected"
+printf 'banana\0apple\0' | .pixi/bin/yuragi --read0 --filter ba \
+  >"$test_dir/read0-actual" 2>"$test_dir/read0-stderr"
+if ! cmp -s "$test_dir/read0-expected" "$test_dir/read0-actual"; then
+  echo "--read0 did not parse NUL-delimited input independently of output" >&2
+  exit 1
+fi
+
+# Place the first byte of a three-byte UTF-8 scalar at the nominal 4 KiB
+# buffer boundary for compiled CLI coverage. The unit test forces the exact
+# chunk split; this fixture does not assume that OS reads fill the buffer.
+printf -v padding '%*s' 4095 ''
+padding="${padding// /a}"
+printf '%s界\r\nsecond\n' "$padding" >"$test_dir/chunk-input"
+printf '%s界\nsecond\n' "$padding" >"$test_dir/chunk-expected"
+.pixi/bin/yuragi --filter '' \
+  <"$test_dir/chunk-input" >"$test_dir/chunk-actual" \
+  2>"$test_dir/chunk-stderr"
+if ! cmp -s "$test_dir/chunk-expected" "$test_dir/chunk-actual"; then
+  echo "boundary-layout stdin corrupted UTF-8 or subsequent records" >&2
+  exit 1
+fi
+
+if ! .pixi/bin/yuragi --help | grep -Fxq \
+  'Usage: yuragi [--filter QUERY | --query QUERY] [--limit N]'; then
+  echo "CLI help is missing the usage contract" >&2
+  exit 1
+fi
+
+help_text="$(.pixi/bin/yuragi --help)"
+if ! grep -Fxq \
+  '  -q, --query STR       seed the interactive prompt with STR' \
+  <<<"$help_text"; then
+  echo "--query help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '  -1, --select-1        accept a sole initial match without the picker' \
+  <<<"$help_text"; then
+  echo "--select-1 help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '  -0, --exit-0          exit 1 on no initial matches without the picker' \
+  <<<"$help_text"; then
+  echo "--exit-0 help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '  -m, --multi           select multiple candidates with TAB/Shift-TAB' \
+  <<<"$help_text"; then
+  echo "--multi help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '      --lang LANGUAGE   phonetic language hint (default: auto)' \
+  <<<"$help_text"; then
+  echo "--lang help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '      --limit N         emit at most N best-ranked candidates' \
+  <<<"$help_text"; then
+  echo "--limit help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '  -i, --ignore-case     match case-insensitively (ASCII)' \
+  <<<"$help_text"; then
+  echo "--ignore-case help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '      --no-ignore-case  match case-sensitively' \
+  <<<"$help_text"; then
+  echo "--no-ignore-case help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '      --read0           read NUL-delimited candidates from standard input' \
+  <<<"$help_text"; then
+  echo "--read0 help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '      --print0          write NUL-delimited candidates to standard output' \
+  <<<"$help_text"; then
+  echo "--print0 help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  '      --explain         print rank, score, key kind, and match positions' \
+  <<<"$help_text"; then
+  echo "--explain help description is not column-aligned" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  'Exit codes: 0 = success, 1 = no match, 2 = error, 130 = interactive abort.' \
+  <<<"$help_text"; then
+  echo "CLI help is missing the documented exit-code contract" >&2
+  exit 1
+fi
+if [[ "$(.pixi/bin/yuragi --version --help)" != "$help_text" ]] || \
+  [[ "$(.pixi/bin/yuragi --help --version)" != "$help_text" ]]; then
+  echo "--help must win over --version regardless of their order" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --help --unknown \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]]; then
+  echo "invalid options must win over --help and exit 2 (got $exit_code)" >&2
+  exit 1
+fi
+if [[ -s "$test_dir/stdout" ]] || \
+  ! grep -Fxq 'yuragi: unknown argument: --unknown' "$test_dir/stderr"; then
+  echo "invalid-option precedence did not produce its exact diagnostic" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --lang zh --lang=ko --help \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || \
+  ! grep -Fxq 'yuragi: --lang may be specified only once' "$test_dir/stderr"; then
+  echo "duplicate --lang must be rejected consistently before --help" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --filter x --ignore-case --no-ignore-case \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: case sensitivity may be specified only once' \
+    "$test_dir/stderr"; then
+  echo "conflicting case flags must produce their exact diagnostic" >&2
+  exit 1
+fi
+
+printf 'banana\n' >"$test_dir/select-1-expected"
+printf 'banana\n' | .pixi/bin/yuragi --select-1 --multi \
+  >"$test_dir/select-1-actual" 2>"$test_dir/select-1-stderr"
+if ! cmp -s "$test_dir/select-1-expected" "$test_dir/select-1-actual" || \
+  [[ -s "$test_dir/select-1-stderr" ]]; then
+  echo "--select-1 --multi did not accept a sole initial match without a TTY" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --exit-0 </dev/null \
+  >"$test_dir/exit-0-stdout" 2>"$test_dir/exit-0-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 1 ]] || [[ -s "$test_dir/exit-0-stdout" ]] || \
+  [[ -s "$test_dir/exit-0-stderr" ]]; then
+  echo "--exit-0 with no initial match must exit 1 with empty output" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --query x --filter y \
+  >"$test_dir/query-filter-stdout" 2>"$test_dir/query-filter-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/query-filter-stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: --query cannot be used with --filter' \
+    "$test_dir/query-filter-stderr"; then
+  echo "--query with --filter must produce its exact usage error" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --multi --filter x \
+  >"$test_dir/multi-filter-stdout" 2>"$test_dir/multi-filter-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/multi-filter-stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: --multi cannot be used with --filter' \
+    "$test_dir/multi-filter-stderr"; then
+  echo "--multi with --filter must produce its exact usage error" >&2
+  exit 1
+fi
+
+printf 'banana\nbar\n' >"$test_dir/ranked-expected"
+printf 'apple\nbanana\nbar\n' | .pixi/bin/yuragi --filter ba \
+  >"$test_dir/ranked-actual" 2>"$test_dir/ranked-stderr"
+if ! cmp -s "$test_dir/ranked-expected" "$test_dir/ranked-actual"; then
+  echo "ranked filtering produced unexpected candidates or ordering" >&2
+  exit 1
+fi
+
+# This byte-exact fixture pins Hibana's published scoring table.
+printf '1	390	original	0,1	banana\n' >"$test_dir/explain-expected"
+printf 'apple\nbanana\n' | .pixi/bin/yuragi --filter ba --explain \
+  >"$test_dir/explain-actual" 2>"$test_dir/explain-stderr"
+if ! cmp -s "$test_dir/explain-expected" "$test_dir/explain-actual"; then
+  echo "--explain did not render the ranked Hibana match report" >&2
+  exit 1
+fi
+
+printf '1	265	original	0	北京大学\n' >"$test_dir/explain-cjk-expected"
+printf '北京大学\n' | .pixi/bin/yuragi --filter 北 --explain \
+  >"$test_dir/explain-cjk-actual" 2>"$test_dir/explain-cjk-stderr"
+if ! cmp -s "$test_dir/explain-cjk-expected" \
+  "$test_dir/explain-cjk-actual"; then
+  echo "--explain positions are not Unicode scalar indices" >&2
+  exit 1
+fi
+
+set +e
+printf 'apple\n' | .pixi/bin/yuragi --filter zz --explain \
+  >"$test_dir/explain-no-match-stdout" \
+  2>"$test_dir/explain-no-match-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 1 ]] || [[ -s "$test_dir/explain-no-match-stdout" ]]; then
+  echo "--explain with no matches must exit 1 with empty stdout" >&2
+  exit 1
+fi
+
+printf '%s\n' \
+  'yuragi: --explain writes a line-oriented report and conflicts with --print0' \
+  >"$test_dir/explain-print0-expected-stderr"
+set +e
+.pixi/bin/yuragi --filter ba --explain --print0 </dev/null \
+  >"$test_dir/explain-print0-stdout" \
+  2>"$test_dir/explain-print0-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/explain-print0-stdout" ]] || \
+  ! cmp -s "$test_dir/explain-print0-expected-stderr" \
+    "$test_dir/explain-print0-stderr"; then
+  echo "--explain with --print0 must produce its exact diagnostic" >&2
+  exit 1
+fi
+
+printf '%s\n' \
+  'yuragi: --explain requires a non-empty --filter query; an empty query performs no matching' \
+  >"$test_dir/explain-empty-expected-stderr"
+set +e
+.pixi/bin/yuragi --filter '' --explain </dev/null \
+  >"$test_dir/explain-empty-stdout" 2>"$test_dir/explain-empty-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/explain-empty-stdout" ]] || \
+  ! cmp -s "$test_dir/explain-empty-expected-stderr" \
+    "$test_dir/explain-empty-stderr"; then
+  echo "--explain with an empty query must produce its exact diagnostic" >&2
+  exit 1
+fi
+
+printf 'READ\n' >"$test_dir/smart-case-expected"
+printf 'READ\nread\n' | .pixi/bin/yuragi --filter RE \
+  >"$test_dir/smart-case-actual" 2>"$test_dir/smart-case-stderr"
+if ! cmp -s "$test_dir/smart-case-expected" "$test_dir/smart-case-actual"; then
+  echo "smart case did not make an uppercase query case-sensitive" >&2
+  exit 1
+fi
+
+printf 'READ\nread\n' >"$test_dir/ignore-case-expected"
+printf 'READ\nread\n' | .pixi/bin/yuragi --filter RE --ignore-case \
+  >"$test_dir/ignore-case-actual" 2>"$test_dir/ignore-case-stderr"
+if ! cmp -s "$test_dir/ignore-case-expected" "$test_dir/ignore-case-actual"; then
+  echo "--ignore-case did not apply ASCII-insensitive matching" >&2
+  exit 1
+fi
+
+printf 'read\n' >"$test_dir/exact-case-expected"
+printf 'READ\nread\n' | .pixi/bin/yuragi --filter re --no-ignore-case \
+  >"$test_dir/exact-case-actual" 2>"$test_dir/exact-case-stderr"
+if ! cmp -s "$test_dir/exact-case-expected" "$test_dir/exact-case-actual"; then
+  echo "--no-ignore-case did not apply exact-case matching" >&2
+  exit 1
+fi
+
+printf 'apple\nbanana\nbar\n' | .pixi/bin/yuragi --filter ba \
+  >"$test_dir/ranked-first" 2>"$test_dir/ranked-first-stderr"
+printf 'apple\nbanana\nbar\n' | .pixi/bin/yuragi --filter ba \
+  >"$test_dir/ranked-second" 2>"$test_dir/ranked-second-stderr"
+if ! cmp -s "$test_dir/ranked-first" "$test_dir/ranked-second"; then
+  echo "ranked filtering is not deterministic" >&2
+  exit 1
+fi
+
+printf 'banana\n' >"$test_dir/limited-expected"
+printf 'apple\nbanana\nbar\n' | .pixi/bin/yuragi --filter ba --limit 1 \
+  >"$test_dir/limited-actual" 2>"$test_dir/limited-stderr"
+if ! cmp -s "$test_dir/limited-expected" "$test_dir/limited-actual"; then
+  echo "--limit 1 did not retain the single best candidate" >&2
+  exit 1
+fi
+
+: >"$test_dir/empty-expected"
+.pixi/bin/yuragi --filter '' </dev/null \
+  >"$test_dir/empty-actual" 2>"$test_dir/empty-stderr"
+if ! cmp -s "$test_dir/empty-expected" "$test_dir/empty-actual"; then
+  echo "empty input with an empty query produced output" >&2
+  exit 1
+fi
+
+set +e
+printf 'apple\n' | .pixi/bin/yuragi --filter zz \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 1 ]]; then
+  echo "a non-empty query with no match must exit 1 (got $exit_code)" >&2
+  exit 1
+fi
+if ! cmp -s "$test_dir/empty-expected" "$test_dir/stdout"; then
+  echo "a no-match result wrote candidate output" >&2
+  exit 1
+fi
+
+set +e
+printf '北京大学\nnotes\n' | .pixi/bin/yuragi --lang zh --filter bjdx \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]]; then
+  echo "unavailable phonetic matching must exit 2 (got $exit_code)" >&2
+  exit 1
+fi
+if [[ -s "$test_dir/stdout" ]]; then
+  echo "blocked phonetic filtering wrote candidate output" >&2
+  exit 1
+fi
+if ! grep -Fxq \
+  'yuragi: --lang zh phonetic matching awaits the Yomi integration; direct matching works without --lang' \
+  "$test_dir/stderr"; then
+  echo "blocked phonetic filtering did not explain the Yomi gate" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --filter ba --limit 0 \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]]; then
+  echo "--limit 0 must exit 2 (got $exit_code)" >&2
+  exit 1
+fi
+if [[ -s "$test_dir/stdout" ]] || ! grep -Fxq \
+  'yuragi: --limit requires a positive candidate count' \
+  "$test_dir/stderr"; then
+  echo "--limit 0 did not produce its exact diagnostic" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --explain </dev/null \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: --explain is a filter-mode report and requires --filter QUERY' \
+    "$test_dir/stderr"; then
+  echo "interactive --explain must produce its exact diagnostic" >&2
+  exit 1
+fi
+
+set +e
+.pixi/bin/yuragi --lang zh </dev/null \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: --lang zh phonetic matching awaits the Yomi integration; direct matching works without --lang' \
+    "$test_dir/stderr"; then
+  echo "interactive phonetic mode must explain the Yomi gate" >&2
+  exit 1
+fi
+
+set +e
+printf '\xff\n' | .pixi/bin/yuragi --filter '' \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]]; then
+  echo "invalid UTF-8 input must exit 2 (got $exit_code)" >&2
+  exit 1
+fi
+if [[ -s "$test_dir/stdout" ]]; then
+  echo "invalid UTF-8 input produced candidate output" >&2
+  exit 1
+fi
+if ! grep -Fq 'yuragi: input error:' "$test_dir/stderr" || \
+  ! grep -Fq 'invalid UTF-8' "$test_dir/stderr"; then
+  echo "invalid UTF-8 input did not produce a useful diagnostic" >&2
+  exit 1
+fi
+
+# Bash's `<&-` closes descriptor 0 for the child and forces `read_bytes()` to
+# take the application's operational input-error path.
+set +e
+.pixi/bin/yuragi --filter '' <&- \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]]; then
+  echo "stdin read failure must exit 2 (got $exit_code)" >&2
+  exit 1
+fi
+if [[ -s "$test_dir/stdout" ]]; then
+  echo "stdin read failure produced candidate output" >&2
+  exit 1
+fi
+if ! grep -Fq 'yuragi: input error:' "$test_dir/stderr" || \
+  ! grep -Fq 'read bytes' "$test_dir/stderr"; then
+  echo "stdin read failure did not produce a useful diagnostic" >&2
+  exit 1
+fi
