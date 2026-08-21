@@ -29,7 +29,8 @@ from mojotui import (
     render_line,
 )
 from std.collections import List as MojoList, Optional
-from std.ffi import c_int, external_call
+from std.ffi import c_int, c_ulong, external_call
+from std.io import FileDescriptor
 
 from yuragi.candidate import Candidate
 from yuragi.options import Options
@@ -371,20 +372,42 @@ struct _FinderAdapter(RuntimeAdapter):
 
 
 def _open_controlling_terminal() raises -> Int:
+    # macOS poll(2) reports POLLNVAL for descriptors opened through the
+    # /dev/tty alias, which would fail mojotui's reactor. Resolve the real
+    # controlling-terminal device from a standard descriptor that is a TTY
+    # and open that device; fall back to /dev/tty only when none is.
+    var standard_descriptors: MojoList[Int] = [2, 1, 0]
+    var name = MojoList[UInt8](length=256, fill=0)
+    for index in range(len(standard_descriptors)):
+        var candidate = standard_descriptors[index]
+        if not FileDescriptor(candidate).isatty():
+            continue
+        # SAFETY: ttyname_r writes a NUL-terminated device path into the
+        # owned buffer, which stays alive for both libc calls; O_RDWR (2)
+        # does not require `open`'s optional mode argument.
+        var status = external_call["ttyname_r", c_int](
+            c_int(candidate), Pointer(to=name[0]), c_ulong(len(name))
+        )
+        if status != 0:
+            continue
+        var descriptor = external_call["open", c_int, num_fixed_args=2](
+            Pointer(to=name[0]), c_int(2)
+        )
+        if descriptor >= 0:
+            return Int(descriptor)
     var path = String("/dev/tty")
     # SAFETY: the owned string stays alive for the complete libc call and
-    # provides a NUL-terminated read-only C view; O_RDWR (2) does not require
-    # `open`'s optional mode argument.
-    var descriptor = external_call["open", c_int, num_fixed_args=2](
+    # provides a NUL-terminated read-only C view.
+    var fallback = external_call["open", c_int, num_fixed_args=2](
         path.as_c_string_slice(),
         c_int(2),
     )
-    if descriptor < 0:
+    if fallback < 0:
         raise Error(
             "interactive mode requires a controlling terminal; run yuragi "
             "from a terminal"
         )
-    return Int(descriptor)
+    return Int(fallback)
 
 
 def _close_descriptor(descriptor: Int) raises:

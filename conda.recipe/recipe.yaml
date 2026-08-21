@@ -18,9 +18,11 @@ requirements:
   build:
     - mojo-compiler =1.0.0
     - mojo-hibana
+    - mojo-mojotui
   host:
     - mojo-compiler =1.0.0
     - mojo-hibana
+    - mojo-mojotui
   run:
     - ${{ pin_compatible('mojo-compiler') }}
 

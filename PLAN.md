@@ -56,14 +56,19 @@ remains candidate data.
   of the ranked view. Marks survive query refinement, render visibly with a
   marked count, and resolve to newline- or NUL-framed output in source order;
   Enter falls back to the cursor candidate when no marks exist.
+- Exercise the compiled picker through a real PTY (resolved from the first
+  standard descriptor that is a terminal, macOS-safe) while candidate input
+  and accepted output remain separate pipes. The contract test covers narrowing,
+  acceptance, both abort keys, pre-TUI automation, multi-selection, source-order
+  output, and terminal-attribute restoration without timing sleeps.
 - Exit with code 1 and empty stdout when a non-empty query has no match.
   Invalid usage, unsupported modes, and input, operational, and internal
   failures exit 2. Exit 130 is active for interactive abort (the fzf/skim
   convention). Explicit phonetic language matching remains gated on Yomi; no
   temporary substring or language logic is hidden in Yuragi.
 
-Evidence: unit tests, the `test-cli` executable contract test, `pixi run check`,
-and `pixi run build`.
+Evidence: unit tests, the `test-cli` and `test-interactive` executable contract
+tests, `pixi run check`, and `pixi run build`.
 
 ## Integration gate A — Moji text contract
 
