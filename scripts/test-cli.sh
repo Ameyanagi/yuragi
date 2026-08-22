@@ -134,6 +134,98 @@ if ! grep -Fxq \
   echo "CLI help is missing the documented exit-code contract" >&2
   exit 1
 fi
+
+# POSIX cksum plus byte length pins each generated integration script exactly,
+# while syntax checks catch errors that a stable but invalid fixture would miss.
+shell_names=(bash zsh fish powershell)
+shell_checksums=(
+  '2958611478 2535'
+  '1613825818 2465'
+  '4250646206 2398'
+  '874700008 3520'
+)
+for index in "${!shell_names[@]}"; do
+  shell_name="${shell_names[$index]}"
+  .pixi/bin/yuragi shell "$shell_name" \
+    >"$test_dir/$shell_name-script" 2>"$test_dir/$shell_name-stderr"
+  actual_checksum="$(cksum "$test_dir/$shell_name-script" | awk '{print $1 " " $2}')"
+  if [[ "$actual_checksum" != "${shell_checksums[$index]}" ]] || \
+    [[ -s "$test_dir/$shell_name-stderr" ]]; then
+    echo "$shell_name integration changed from its byte-exact fixture" >&2
+    exit 1
+  fi
+done
+bash -n "$test_dir/bash-script"
+if command -v zsh >/dev/null 2>&1; then
+  zsh -n "$test_dir/zsh-script"
+fi
+
+config_path="$(
+  YURAGI_CONFIG_FILE=/explicit/yuragi.toml \
+  XDG_CONFIG_HOME=/ignored-xdg HOME=/ignored-home \
+  .pixi/bin/yuragi config path
+)"
+if [[ "$config_path" != /explicit/yuragi.toml ]]; then
+  echo 'YURAGI_CONFIG_FILE must win config path precedence' >&2
+  exit 1
+fi
+config_path="$(
+  env -u YURAGI_CONFIG_FILE XDG_CONFIG_HOME=/xdg HOME=/ignored-home \
+    .pixi/bin/yuragi config path
+)"
+if [[ "$config_path" != /xdg/yuragi/config.toml ]]; then
+  echo 'XDG_CONFIG_HOME must win HOME config path precedence' >&2
+  exit 1
+fi
+config_path="$(
+  env -u YURAGI_CONFIG_FILE -u XDG_CONFIG_HOME HOME=/home/person \
+    .pixi/bin/yuragi config path
+)"
+if [[ "$config_path" != /home/person/.config/yuragi/config.toml ]]; then
+  echo 'HOME config path fallback changed' >&2
+  exit 1
+fi
+
+set +e
+env -u YURAGI_CONFIG_FILE -u XDG_CONFIG_HOME -u HOME \
+  .pixi/bin/yuragi config path \
+  >"$test_dir/config-path-stdout" 2>"$test_dir/config-path-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/config-path-stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: config error: configuration path requires YURAGI_CONFIG_FILE, XDG_CONFIG_HOME, or HOME; set one of those environment variables' \
+    "$test_dir/config-path-stderr"; then
+  echo 'unresolved config path must be an operational exit-2 error' >&2
+  exit 1
+fi
+
+doctor_config_home="$test_dir/doctor-config"
+set +e
+env -u YURAGI_CONFIG_FILE -u SHELL \
+  XDG_CONFIG_HOME="$doctor_config_home" HOME=/ignored PATH='' \
+  .pixi/bin/yuragi doctor \
+  >"$test_dir/doctor-stdout" 2>"$test_dir/doctor-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 0 ]] || [[ -s "$test_dir/doctor-stderr" ]]; then
+  echo 'doctor warnings must remain a successful read-only diagnostic' >&2
+  exit 1
+fi
+printf '%s\n' \
+  'Yuragi doctor' \
+  'ok version: 0.0.0' \
+  'ok executable: running' \
+  "info config path: $doctor_config_home/yuragi/config.toml" \
+  'info config file: absent; loading is not enabled in this release' \
+  'warn shell hint: SHELL is not set' \
+  'warn path finder: fd, fdfind, and find were not found on PATH' \
+  'info shell scripts: dependencies are checked when each binding runs' \
+  >"$test_dir/doctor-expected"
+if ! cmp -s "$test_dir/doctor-expected" "$test_dir/doctor-stdout"; then
+  echo 'doctor warning report changed from its exact fixture' >&2
+  exit 1
+fi
 if [[ "$(.pixi/bin/yuragi --version --help)" != "$help_text" ]] || \
   [[ "$(.pixi/bin/yuragi --help --version)" != "$help_text" ]]; then
   echo "--help must win over --version regardless of their order" >&2

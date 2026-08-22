@@ -30,11 +30,16 @@ its first release. Each release names the exact compiler used to build it.
 - Standard input is buffered in memory and decoded lossily: each invalid UTF-8
   byte becomes U+FFFD REPLACEMENT CHARACTER, matching fzf behavior.
 - `--filter ''` is implemented as identity selection.
-- Non-empty `--filter` queries rank candidates through the installed Hibana
-  package.
-- An inline interactive picker is implemented with a fixed keymap. It does not
-  yet support `--bind`, configuration, or shell bindings.
-- Phonetic `--lang` matching still awaits Yomi.
+- Non-empty queries use Hibana's deterministic direct-text scorer and bounded
+  top-K retention. Explicit phonetic language modes remain gated on Yomi.
+- Interactive mode is implemented as an inline MojoTUI picker on the controlling
+  terminal, with identity-stable selection, query seeding, automation, and
+  multi-select. Search is still synchronous and input is indexed before opening.
+- The picker uses a fixed keymap and does not yet support `--bind`.
+- Preview, Windows line-oriented console behavior, configuration-file loading,
+  and built-in filesystem walking are not yet implemented. Read-only
+  configuration-path resolution plus generated Bash, Zsh, Fish, and PowerShell
+  bindings are available.
 
 ## CLI precedence
 
@@ -45,7 +50,8 @@ validly supplied, `--help` wins over `--version`, independent of flag order.
 
 ## Exit status
 
-- `0`: success or an informational mode;
-- `1`: no match or nothing accepted;
-- `2`: usage or operational error, including standard-input I/O failures;
-- `130`: interactive abort.
+- `0`: successful output or an informational mode;
+- `1`: no noninteractive match or nothing to accept;
+- `2`: invalid command-line usage, standard-input I/O failure, unavailable mode, or
+  unexpected internal/operational failure;
+- `130`: interactive abort through Escape or Ctrl-C.

@@ -13,18 +13,22 @@ from yuragi.interactive import (
     _item_line,
     _match_count,
     _marked_count,
+    _row_count,
     _selected_id,
     _total_count,
+    _visible_window,
 )
 from yuragi.options import Options, parse_options
 from yuragi.pipeline import rank_picker_query
+from yuragi.search_index import SearchIndex
 
 
 def _model(var candidates: List[Candidate]) raises -> _FinderModel:
     var options = Options()
     var seeded_query = String(options.query)
     var matches = rank_picker_query(candidates, seeded_query, options)
-    return _FinderModel(candidates^, options, matches^)
+    var index = SearchIndex(candidates^)
+    return _FinderModel(index^, options, matches^, len(matches))
 
 
 def _multi_model(var candidates: List[Candidate]) raises -> _FinderModel:
@@ -32,7 +36,8 @@ def _multi_model(var candidates: List[Candidate]) raises -> _FinderModel:
     var options = parse_options(args^)
     var seeded_query = String(options.query)
     var matches = rank_picker_query(candidates, seeded_query, options)
-    return _FinderModel(candidates^, options, matches^)
+    var index = SearchIndex(candidates^)
+    return _FinderModel(index^, options, matches^, len(matches))
 
 
 def _seeded_model(
@@ -42,7 +47,8 @@ def _seeded_model(
     var options = parse_options(args^)
     var seeded_query = String(options.query)
     var matches = rank_picker_query(candidates, seeded_query, options)
-    return _FinderModel(candidates^, options, matches^)
+    var index = SearchIndex(candidates^)
+    return _FinderModel(index^, options, matches^, len(matches))
 
 
 def test_typing_narrows_matches_and_counter() raises:
@@ -181,9 +187,29 @@ def test_multi_marks_survive_query_refinement() raises:
 
     assert_false(_handle_key(model, KeyEvent.named(KeyEvent.BACKSPACE)))
     assert_equal(_match_count(model), 2)
+    assert_equal(len(model.matches), 0)
+    assert_equal(_row_count(model), 2)
+    assert_true(model.identity_mode)
     assert_true(_is_marked(model, 0))
     var restored_line = _item_line(model, 0)
     assert_equal(restored_line.spans[0].content, "* ")
+
+
+def test_multi_limit_caps_marks_across_query_changes() raises:
+    var candidates = candidates_from_text("alpha\nbravo\n")
+    var args: List[String] = ["yuragi", "--multi", "--limit", "1"]
+    var session = FinderSession(candidates^, parse_options(args^))
+
+    assert_false(_handle_key(session._model, KeyEvent.named(KeyEvent.TAB)))
+    assert_equal(_marked_count(session._model), 1)
+    assert_false(_handle_key(session._model, KeyEvent.character(String("b"))))
+    assert_false(_handle_key(session._model, KeyEvent.named(KeyEvent.TAB)))
+    assert_equal(_marked_count(session._model), 1)
+
+    assert_true(_handle_key(session._model, KeyEvent.named(KeyEvent.ENTER)))
+    var selected = session.selection()
+    assert_equal(len(selected), 1)
+    assert_equal(selected[0].text, "alpha")
 
 
 def test_multi_enter_returns_reverse_marks_in_source_order() raises:
@@ -248,11 +274,11 @@ def test_empty_query_preserves_all_candidates_in_source_order() raises:
 
     assert_equal(model.query, "")
     assert_equal(_match_count(model), 3)
-    for index in range(3):
-        assert_equal(model.matches[index].source_index, index)
-    assert_equal(model.matches[0].text, "third")
-    assert_equal(model.matches[1].text, "first")
-    assert_equal(model.matches[2].text, "second")
+    assert_equal(len(model.matches), 0)
+    assert_equal(_row_count(model), 3)
+    assert_equal(_item_line(model, 0).spans[0].content, "third")
+    assert_equal(_item_line(model, 1).spans[0].content, "first")
+    assert_equal(_item_line(model, 2).spans[0].content, "second")
 
 
 def test_seeded_query_initializes_ranked_state_on_first_match() raises:
@@ -268,6 +294,47 @@ def test_seeded_query_initializes_ranked_state_on_first_match() raises:
     assert_equal(model.matches[1].text, "banana")
     assert_true(model.cursor.selected.value() == UInt(0))
     assert_true(_selected_id(model).value() == model.matches[0].source_index)
+
+    assert_false(_handle_key(model, KeyEvent.character(String("n"))))
+    assert_equal(model.query, "ban")
+    assert_true(model.index.last_search_was_incremental())
+    assert_equal(model.index.last_scanned_count(), 2)
+
+
+def test_seeded_limited_query_preserves_exact_total_match_count() raises:
+    var args: List[String] = ["yuragi", "--query", "a", "--limit", "1"]
+    var options = parse_options(args^)
+    var candidates = candidates_from_text("apple\nbanana\npear\n")
+    var session = FinderSession(candidates^, options)
+
+    assert_equal(len(session._model.matches), 1)
+    assert_equal(_match_count(session._model), 3)
+    assert_equal(_counter_text(session._model), "3/3")
+
+
+def test_empty_query_limit_bounds_interactive_rows_not_exact_count() raises:
+    var args: List[String] = ["yuragi", "--limit", "1"]
+    var candidates = candidates_from_text("first\nsecond\nthird\n")
+    var session = FinderSession(candidates^, parse_options(args^))
+
+    assert_equal(_match_count(session._model), 3)
+    assert_equal(_row_count(session._model), 1)
+    assert_equal(_item_line(session._model, 0).spans[0].content, "first")
+
+
+def test_visible_window_materializes_only_rows_around_cursor() raises:
+    var candidates = candidates_from_text("0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n")
+    var model = _model(candidates^)
+    for _ in range(8):
+        assert_false(_handle_key(model, KeyEvent.named(KeyEvent.DOWN)))
+
+    var window = _visible_window(model, 4)
+    assert_equal(window[0], 6)
+    assert_equal(window[1], 10)
+
+    var empty_window = _visible_window(model, 0)
+    assert_equal(empty_window[0], 0)
+    assert_equal(empty_window[1], 0)
 
 
 def main() raises:

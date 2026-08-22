@@ -2,32 +2,38 @@
 
 ## v0.1 — Foundation
 
-- Stabilize newline-delimited UTF-8 stdin/stdout and CLI error contracts.
+- [x] Stabilize newline-delimited UTF-8 stdin/stdout and CLI error contracts.
 - Integrate pinned Moji text views and transformed-to-source mappings.
-- Integrate pinned Hibana deterministic scoring, positions, and stable ranking.
-- Integrate pinned Yomi phonetic representations for `auto`, `zh`, `ja`, and
+- [x] Integrate pinned Hibana deterministic scoring, positions, and stable ranking.
+- Publish and integrate pinned Yomi phonetic representations for `auto`, `zh`, `ja`, and
   `ko` without losing source ranges.
 - Make `printf "北京大学\nnotes\n" | yuragi --lang zh --filter bjdx` emit the
   correct original candidate.
-- Add unit, reference-value, invariant, installed-package, and executable CLI
+- [x] Add unit, reference-value, invariant, and executable CLI/PTY
   coverage on every supported target.
-- Build and test the Conda application package from a clean source archive.
+- [x] Build and test the Conda application package from a clean source archive.
 
-The options/ingestion/output foundation is implemented. Non-empty matching is
-still dependency-gated; see `PLAN.md` for entry criteria and work order.
+Direct-text filtering, the interactive picker, exact incremental match-set
+reuse, and Yomi's source-side typed multi-key APIs are implemented. Product
+phonetic indexing remains gated only on immutable Hibana/Yomi package releases;
+see `PLAN.md` for the publication and integration order.
 
 ## v0.2 — Usability
 
-- Add interactive selection through MojoTUI without creating a second search
+- [x] Add interactive selection through MojoTUI without creating a second search
   pipeline.
-- Add preview, configuration, and cancellation around the v0.1 core.
-- Expand integration fixtures and publish shell usage guidance.
+- Add preview and cancellation around the v0.1 core.
+- [x] Reserve deterministic configuration resolution and publish shell usage
+  guidance with generated bindings and `doctor` diagnostics.
 
 ## v0.3 — Performance
 
-- Add reproducible end-to-end benchmarks and representative CJK datasets.
-- Add bounded-memory ingestion or incremental top-K when measurements require
-  it.
+- [x] Add a reproducible bounded-search orchestration benchmark.
+- [x] Add a fair 31-sample Yuru/Yuragi full and incremental search protocol.
+- Add representative licensed CJK datasets and language-indexing benchmarks.
+- [x] Reuse the prior complete exact match set for safe query extensions.
+- [x] Add lazy, viewport-bounded identity-row resolution without retaining a
+  redundant full-corpus identity-index list.
 - Optimize measured orchestration bottlenecks without moving Hibana, Yomi, or
   Moji responsibilities into the application.
 

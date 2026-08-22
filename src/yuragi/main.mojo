@@ -8,18 +8,22 @@ from yuragi.candidate import (
     RecordFraming,
     render_candidates,
 )
+from yuragi.config import config_path
+from yuragi.doctor import detect_doctor_report
 from yuragi.explain import render_explanation
 from yuragi.interactive import FinderOutcome, FinderSession
-from yuragi.options import Options, parse_options, usage, version_text
+from yuragi.options import CommandKind, Options, parse_options, usage, version_text
 from yuragi.pipeline import (
     InitialAutomationAction,
     InitialAutomationDecision,
-    initial_automation,
+    initial_automation_indexed,
     matching_backend_required,
     select,
     select_ranked,
     validate_foundation_mode,
 )
+from yuragi.search_index import SearchIndex
+from yuragi.shell import shell_script
 
 
 def _read_standard_input(framing: RecordFraming) raises -> List[Candidate]:
@@ -57,6 +61,23 @@ def main():
     if options.version_requested:
         print(version_text())
         return
+    if options.command == CommandKind.SHELL:
+        print(shell_script(options.shell), end="")
+        return
+    if options.command == CommandKind.CONFIG_PATH:
+        try:
+            print(config_path())
+        except error:
+            print("yuragi: config error: ", error, sep="", file=stderr)
+            exit(2)
+        return
+    if options.command == CommandKind.DOCTOR:
+        try:
+            print(detect_doctor_report(), end="")
+        except error:
+            print("yuragi: doctor error: ", error, sep="", file=stderr)
+            exit(2)
+        return
 
     try:
         validate_foundation_mode(options)
@@ -83,9 +104,10 @@ def main():
         exit(2)
 
     if not options.has_filter:
+        var index = SearchIndex(candidates^)
         var initial = InitialAutomationDecision()
         try:
-            initial = initial_automation(candidates, options)
+            initial = initial_automation_indexed(index, options)
         except error:
             print("yuragi: internal error: ", error, sep="", file=stderr)
             exit(2)
@@ -94,6 +116,7 @@ def main():
             RecordFraming.NUL if options.print0 else RecordFraming.LINES
         )
         var action = initial.action
+        var total_matches = initial.total_matches
         var initial_matches = initial^.take_matches()
         if action == InitialAutomationAction.ACCEPT:
             var selected = List[Candidate]()
@@ -108,7 +131,7 @@ def main():
         if action == InitialAutomationAction.EXIT_NO_MATCH:
             exit(1)
 
-        var finder = FinderSession(candidates^, options, initial_matches^)
+        var finder = FinderSession(index^, options, initial_matches^, total_matches)
         var outcome = FinderOutcome.ABORTED
         try:
             outcome = finder.run()

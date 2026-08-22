@@ -11,8 +11,10 @@ than exporting foundation algorithms.
 
 The current implementation accepts candidates on standard input and provides
 both an inline interactive picker and deterministic noninteractive `--filter`
-output through direct fuzzy matching. Phonetic representations remain gated on
-Yomi.
+output through direct fuzzy matching. Interactive query extensions reuse the
+previous complete exact match set through a persistent `SearchIndex`; arbitrary
+edits fall back to a full scan. Phonetic representations remain gated on the
+first immutable Yomi package release.
 The project is independently installable and does not require any application
 from the wider ecosystem.
 
@@ -173,16 +175,52 @@ Marks follow candidate source identities, so they survive query refinement
 even while a marked candidate is absent from the current matches. TAB and
 Shift-TAB are inert without `--multi`.
 
+An empty prompt is a lazy identity view: it preserves the exact full count and
+source order but materializes only the rows visible in the terminal. This keeps
+ranked-row startup and redraw work bounded by the viewport instead of the
+corpus size. `--limit N` bounds selectable interactive rows while the counter
+retains the exact untruncated match count.
+
 Exit codes are `0` for a successful match or acceptance, `1` when there is no
 match or nothing to accept, `2` for usage or operational errors, and `130` for
 interactive abort. Only a successful selection is written to stdout.
+
+## Shell workflows and diagnostics
+
+Generate a shell integration on stdout, then load it with the shell's normal
+evaluation mechanism:
+
+```sh
+eval "$(yuragi shell bash)"
+eval "$(yuragi shell zsh)"
+yuragi shell fish | source
+```
+
+PowerShell uses `Invoke-Expression ((yuragi shell powershell) -join "`n")`.
+The generated scripts provide Ctrl-T file selection, Ctrl-R history selection,
+Alt-C directory selection, and fzf-style `**` path completion. They prefer
+`fd`, accept Debian's `fdfind` name, and fall back to `find` on POSIX shells or
+`Get-ChildItem` in PowerShell. Each binding checks Yuragi and its path source at
+the time it runs. Set `YURAGI_BIN` when the executable is not named `yuragi` or
+is not discoverable through the shell's normal command lookup.
+
+Run `yuragi doctor` for a read-only report of the resolved configuration path,
+shell hint, and available path finder. Missing optional shell hints and finders
+are warnings and do not make `doctor` fail; an operational failure to resolve
+the configuration location exits 2.
+
+`yuragi config path` prints the reserved configuration path. Resolution order
+is `YURAGI_CONFIG_FILE`, then `XDG_CONFIG_HOME/yuragi/config.toml`, then
+`HOME/.config/yuragi/config.toml`. Configuration values are not loaded in this
+release: Mojo 1.0 provides safe filesystem I/O but no TOML parser, and Yuragi
+does not claim compatibility through an incomplete hand-written subset.
 
 ## Repository map
 
 - `src/yuragi/`: application source and executable entry point
 - `tests/`: TestSuite unit, reference-value, and invariant tests
 - `examples/`: small compilable usage programs
-- `benchmarks/`: reproducible methodology and later benchmark programs
+- `benchmarks/`: reproducible fair-search and profiler-oriented benchmarks
 - `docs/`: architecture, design, compatibility, roadmap, and release policy
 - `conda.recipe/`: local Rattler build recipe
 - `PLAN.md`: dependency-gated implementation plan and acceptance evidence

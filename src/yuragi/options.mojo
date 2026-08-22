@@ -3,8 +3,27 @@
 from hibana import CaseMode
 from std.collections import List
 
+from yuragi.shell import ShellKind
+
 
 comptime VERSION = "0.0.0"
+
+
+struct CommandKind(Copyable, Equatable, ImplicitlyCopyable):
+    """Top-level execution mode selected before candidate processing."""
+
+    var _value: Int
+
+    comptime FIND = CommandKind(_value=0)
+    comptime DOCTOR = CommandKind(_value=1)
+    comptime SHELL = CommandKind(_value=2)
+    comptime CONFIG_PATH = CommandKind(_value=3)
+
+    def __init__(out self, *, _value: Int):
+        self._value = _value
+
+    def __eq__(self, other: Self) -> Bool:
+        return self._value == other._value
 
 
 struct Options(Copyable):
@@ -27,6 +46,8 @@ struct Options(Copyable):
     var multi: Bool
     var help_requested: Bool
     var version_requested: Bool
+    var command: CommandKind
+    var shell: ShellKind
 
     def __init__(out self):
         self.has_filter = False
@@ -46,6 +67,55 @@ struct Options(Copyable):
         self.multi = False
         self.help_requested = False
         self.version_requested = False
+        self.command = CommandKind.FIND
+        self.shell = ShellKind.BASH
+
+
+def _parse_subcommand(args: List[String], mut options: Options) raises -> Bool:
+    if len(args) < 2:
+        return False
+    var command = args[1]
+    if command == "doctor":
+        if len(args) != 2:
+            raise Error("doctor accepts no arguments; got: ", args[2])
+        options.command = CommandKind.DOCTOR
+        return True
+    if command == "shell":
+        if len(args) < 3:
+            raise Error("shell requires one of: bash, zsh, fish, powershell")
+        if len(args) > 3:
+            raise Error("shell accepts one shell name; unexpected argument: ", args[3])
+        var shell = args[2]
+        if shell == "bash":
+            options.shell = ShellKind.BASH
+        elif shell == "zsh":
+            options.shell = ShellKind.ZSH
+        elif shell == "fish":
+            options.shell = ShellKind.FISH
+        elif shell == "powershell":
+            options.shell = ShellKind.POWERSHELL
+        else:
+            raise Error(
+                "unsupported shell: ",
+                shell,
+                "; choose bash, zsh, fish, or powershell",
+            )
+        options.command = CommandKind.SHELL
+        return True
+    if command == "config":
+        if len(args) < 3:
+            raise Error("config requires the path action; use: yuragi config path")
+        if args[2] != "path":
+            raise Error(
+                "unsupported config action: ",
+                args[2],
+                "; the only supported action is path",
+            )
+        if len(args) > 3:
+            raise Error("config path accepts no arguments; got: ", args[3])
+        options.command = CommandKind.CONFIG_PATH
+        return True
+    return False
 
 
 def _set_language(mut options: Options, value: StringSlice) raises:
@@ -154,6 +224,8 @@ def _validate_options(options: Options) raises:
 def parse_options(args: List[String]) raises -> Options:
     """Parse all argv before applying help/version execution precedence."""
     var options = Options()
+    if _parse_subcommand(args, options):
+        return options^
     var index = 1
     while index < len(args):
         var argument = String(args[index])
@@ -221,6 +293,9 @@ def usage() -> String:
     return String(
         "Usage: yuragi [--filter QUERY | --query QUERY] [--limit N]\n"
         "              [--lang auto|zh|ja|ko] [options]\n"
+        "       yuragi doctor\n"
+        "       yuragi shell bash|zsh|fish|powershell\n"
+        "       yuragi config path\n"
         "\n"
         "Read newline-delimited candidates from standard input and write selected\n"
         "candidates to standard output. Without --filter, open an inline picker;\n"
@@ -244,6 +319,11 @@ def usage() -> String:
         "      --explain         print rank, score, key kind, and match positions\n"
         "  -h, --help            show this help\n"
         "      --version         show the version\n"
+        "\n"
+        "Commands:\n"
+        "  doctor                report environment and workflow dependencies\n"
+        "  shell SHELL           print Ctrl-T, Ctrl-R, Alt-C, and ** integration\n"
+        "  config path           print the reserved config path (loading disabled)\n"
         "\n"
         "Interactive flag matrix: --query seeds the prompt; --select-1\n"
         "auto-accepts and prints a sole initial match; --exit-0 exits 1\n"
