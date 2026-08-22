@@ -22,6 +22,9 @@ retain 20 rows. The fixed cases are:
 | repeat base | `component1` | 3,439 / 40,951 |
 | extension | `component1` -> `component100` | 37 / 856 remain |
 
+Before timing, Yuragi asserts locked literal checksums for the ordered corpus
+and every expected result, so corpus, ranking, or position drift fails the run.
+
 Yuragi forces and measures full scans for every standalone query. It also times
 the second, incremental operation after an untimed setup query. Its output
 includes `scanned`, so a benchmark fails if the persistent `SearchIndex` stops
@@ -31,7 +34,7 @@ full `component1` and `component100` searches are the same-query comparators.
 Run the optimized harnesses:
 
 ```sh
-pixi run bench-fair
+pixi run --locked bench-fair
 
 cd ../yuru
 cargo bench --bench search fair_compare
