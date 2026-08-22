@@ -1,1 +1,4 @@
-"""Yuragi is an application and intentionally has no public library API."""
+"""Yuragi's deliberately small prepared-search API."""
+
+from .language import LanguageMode
+from .search_index import SearchIndex
