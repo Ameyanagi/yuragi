@@ -39,8 +39,8 @@ struct _BestKeyMatch(Copyable, ImplicitlyCopyable):
         self.query_index = query_index
 
 
-struct SearchIndex(Copyable, Sized):
-    """Own candidates and a flattened, arena-backed family of search keys.
+struct SearchIndex(Sized):
+    """Movably own candidates and a flattened, arena-backed key family.
 
     ``AUTO`` is deliberately direct-only. Explicit ``JA``, ``ZH``, and ``KO``
     modes prepare bounded Yomi key families once, then broad searches score the
@@ -51,6 +51,8 @@ struct SearchIndex(Copyable, Sized):
     Direct query extensions retain the previous complete match set. Derived
     phonetic query families always scan the full candidate set because an
     extended input can change the family rather than merely narrow it.
+    The index is intentionally not copyable: duplicating it would deep-copy
+    candidate strings and prepared arenas. Transfer it with ``^`` instead.
     """
 
     var _candidates: List[Candidate]
