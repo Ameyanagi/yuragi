@@ -7,7 +7,7 @@ channels = [
 ]
 name = "yuragi"
 platforms = ["osx-arm64", "linux-64", "linux-aarch64"]
-version = "0.0.0"
+version = "0.1.0"
 
 [tasks]
 bench-fair = { cmd = "mojo run --Werror -I src benchmarks/bench_fair_compare.mojo", description = "Run the fair Yuru/Yuragi plain-search comparison protocol" }
@@ -26,13 +26,9 @@ test-interactive = { cmd = "bash scripts/test-interactive.sh", depends-on = ["bu
 yuragi = { cmd = ".pixi/bin/yuragi", depends-on = ["build"], description = "Run the local Yuragi executable" }
 
 [dependencies]
-mojo-hibana = "*"
-mojo-mojotui = "*"
 mojo = "==1.0.0"
+mojo-hibana = "==0.1.0"
+mojo-moji = "==0.1.0"
+mojo-mojotui = "==0.1.1"
+mojo-yomi = "==0.1.1"
 rattler-build = ">=0.74,<0.75"
-
-# Wave 3 packaging proof: hibana is consumed as an installed Conda package
-# from a local file:// channel built out of the sibling checkout. The local
-# channel only serves osx-arm64 today, so the dependency is scoped to the
-# platform it can resolve on; it moves to [dependencies] once hibana
-# publishes to a hosted channel for every supported platform.
