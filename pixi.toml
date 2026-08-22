@@ -27,6 +27,7 @@ test-interactive = { cmd = "bash scripts/test-interactive.sh", depends-on = ["bu
 yuragi = { cmd = ".pixi/bin/yuragi", depends-on = ["build"], description = "Run the local Yuragi executable" }
 
 [dependencies]
+jq = ">=1.7,<2"
 mojo = "==1.0.0"
 mojo-hibana = "==0.1.0"
 mojo-moji = "==0.1.0"
