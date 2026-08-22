@@ -44,7 +44,7 @@ from mojotui import (
     render_line,
     text_input_action,
 )
-from std.collections import List as MojoList, Optional
+from std.collections import List as MojoList, Optional, Span as StdSpan
 from std.ffi import c_int, c_ulong, external_call
 from std.io import FileDescriptor
 from std.utils import Variant
@@ -378,6 +378,17 @@ def _delete_previous_word(mut model: _FinderModel) raises -> Bool:
     return _apply_editor_command(model, EditorCommand.insert(""))
 
 
+def _delete_to_line_end(mut model: _FinderModel) raises -> Bool:
+    """Delete from the primary caret to its line end as one transaction."""
+    var cursor = model.input.engine.selections.primary_selection().head
+    var line = model.input.engine.document.line_of_offset(cursor)
+    var end = model.input.engine.document.line_end(line)
+    if cursor == end:
+        return False
+    model.input.engine.selections = SelectionSet([Selection(cursor, end)])
+    return _apply_editor_command(model, EditorCommand.insert(""))
+
+
 def _apply_keymap(mut model: _FinderModel, key: KeyEvent) raises -> Bool:
     """Resolve navigation, deletion, clipboard, history, and plain text."""
     var resolution = model.keymap.resolve(model.keymap_state, key, "editor", 0)
@@ -439,13 +450,50 @@ def _handle_key(mut model: _FinderModel, key: KeyEvent) raises -> Bool:
         _ = _clear_query(model)
     elif _control_character(key, "w"):
         _ = _delete_previous_word(model)
+    elif _control_character(key, "a"):
+        _ = _apply_editor_command(
+            model, EditorCommand.motion(EditorCommandKind.LINE_START)
+        )
+    elif _control_character(key, "e"):
+        _ = _apply_editor_command(
+            model, EditorCommand.motion(EditorCommandKind.LINE_END)
+        )
+    elif _control_character(key, "b"):
+        _ = _apply_editor_command(
+            model, EditorCommand.motion(EditorCommandKind.MOVE_LEFT)
+        )
+    elif _control_character(key, "f"):
+        _ = _apply_editor_command(
+            model, EditorCommand.motion(EditorCommandKind.MOVE_RIGHT)
+        )
+    elif _control_character(key, "h"):
+        _ = _apply_editor_command(
+            model, EditorCommand(EditorCommandKind.DELETE_BACKWARD)
+        )
+    elif _control_character(key, "d"):
+        _ = _apply_editor_command(
+            model, EditorCommand(EditorCommandKind.DELETE_FORWARD)
+        )
+    elif _control_character(key, "k"):
+        _ = _delete_to_line_end(model)
     else:
         _ = _apply_keymap(model, key)
     return False
 
 
+def _c1_escape(value: Int) -> String:
+    """Return one visible, inert, fixed-width escape for a C1 scalar."""
+    var escape = String("\\")
+    escape += "u{"
+    for shift in range(12, -1, -4):
+        var digit = (value >> shift) & 0xF
+        escape += chr(ord("0") + digit if digit < 10 else ord("A") + digit - 10)
+    escape += "}"
+    return escape^
+
+
 def _display_text(text: StringSlice) -> String:
-    """Replace terminal controls one-for-one without changing source text."""
+    """Render terminal controls inertly without changing source text."""
     var display = String()
     for scalar in text.codepoints():
         var value = Int(scalar.to_u32())
@@ -453,9 +501,32 @@ def _display_text(text: StringSlice) -> String:
             display += chr(0x2400 + value)
         elif value == 0x7F:
             display += chr(0x2421)
+        elif value >= 0x80 and value <= 0x9F:
+            display += _c1_escape(value)
         else:
             display.append(scalar)
     return display^
+
+
+def _display_positions(text: StringSlice, positions: StdSpan[Int, _]) -> MojoList[Int]:
+    """Project source-scalar highlights across expanded C1 escapes."""
+    var projected = MojoList[Int]()
+    var source_index = 0
+    var position_index = 0
+    var display_index = 0
+    for scalar in text.codepoints():
+        var value = Int(scalar.to_u32())
+        var display_length = 8 if value >= 0x80 and value <= 0x9F else 1
+        if (
+            position_index < len(positions)
+            and positions[position_index] == source_index
+        ):
+            for offset in range(display_length):
+                projected.append(display_index + offset)
+            position_index += 1
+        source_index += 1
+        display_index += display_length
+    return projected^
 
 
 def _item_line(model: _FinderModel, index: Int) raises -> Line:
@@ -472,9 +543,12 @@ def _item_line(model: _FinderModel, index: Int) raises -> Line:
     var line = Line.from_text(display_text.copy())
     var query = _query_text(model)
     if query != "":
+        var display_positions = _display_positions(
+            source_text, model.matches[index].positions
+        )
         line = Line.highlighted(
             display_text^,
-            model.matches[index].positions,
+            display_positions,
             patch,
         )
     if not model.multi:

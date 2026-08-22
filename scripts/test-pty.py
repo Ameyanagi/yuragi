@@ -423,6 +423,86 @@ def drive_control_w_deletes_word(
     os.write(master, b"\x1b")
 
 
+def drive_terminal_editor_bindings(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    wait_for_initial_picker(name, master, slave, process, output, screen)
+    os.write(master, b"lpha")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "partial query before Ctrl-A",
+        lambda current: current.line(0).startswith("> lpha"),
+    )
+
+    # Ctrl-A must move to the start, not select all as in the generic editor
+    # keymap. Inserting `a` therefore restores the exact `alpha` query.
+    os.write(master, b"\x01a")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "Ctrl-A line start without select-all",
+        lambda current: current.line(0).startswith("> alpha")
+        and current.line(1).startswith("lang=auto matches=1/3"),
+    )
+
+    # Ctrl-A, Ctrl-F, Ctrl-K leaves the first grapheme. Undo restores the
+    # query through the unchanged default Ctrl-Z binding.
+    os.write(master, b"\x01\x06\x0b")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "Ctrl-F movement and Ctrl-K kill-to-end",
+        lambda current: current.line(0) == "> a",
+    )
+    os.write(master, b"\x1a")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "Ctrl-Z restores Ctrl-K transaction",
+        lambda current: current.line(0).startswith("> alpha"),
+    )
+
+    os.write(master, b"\x05\x02\x08")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "Ctrl-E, Ctrl-B, and Ctrl-H edit at the caret",
+        lambda current: current.line(0).startswith("> alpa"),
+    )
+    os.write(master, b"\x1a\x01\x04")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "Ctrl-D forward deletion",
+        lambda current: current.line(0).startswith("> lpha"),
+    )
+    os.write(master, b"\x1a\r")
+
+
 def drive_multi(
     name: str,
     master: int,
@@ -655,6 +735,33 @@ def drive_read0_accepts_plain_candidate(
     os.write(master, b"\r")
 
 
+def drive_c1_candidate(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "inert C1 escape in the selected row",
+        lambda current: current.line(1).startswith(
+            "lang=auto matches=2/2 retained=2 shown=2 marks=0"
+        )
+        and current.selected(r"a\u{009B}b")
+        and current.contains("plain"),
+    )
+    attributes = termios.tcgetattr(slave)
+    if int(attributes[3]) & (termios.ICANON | termios.ECHO):
+        fail(name, "controlling terminal did not enter raw mode", output, screen)
+    os.write(master, b"\r")
+
+
 def run_case(
     binary: Path,
     name: str,
@@ -780,6 +887,14 @@ def main() -> int:
     )
     run_case(
         binary,
+        "terminal editor control bindings",
+        [],
+        b"alpha\n",
+        0,
+        driver=drive_terminal_editor_bindings,
+    )
+    run_case(
+        binary,
         "select-1 accepts initial match",
         ["--select-1", "--query", "charlie"],
         b"charlie\n",
@@ -846,6 +961,16 @@ def main() -> int:
     )
     run_case(
         binary,
+        "C1 display is inert and selection preserves bytes",
+        ["--print0"],
+        b"a\xc2\x9bb\0",
+        0,
+        driver=drive_c1_candidate,
+        check_restoration=True,
+        candidates=b"a\xc2\x9bb\nplain\n",
+    )
+    run_case(
+        binary,
         "zh PTY phonetic",
         ["--lang", "zh", "--query", "bjdx"],
         "北京大学\n".encode(),
@@ -873,8 +998,8 @@ def main() -> int:
     )
     print(
         "Interactive PTY tests passed "
-        "(accept, abort, editor controls, paste, no-match guidance, multi, "
-        "source order, read0 controls, and explicit zh/ja/ko search)."
+        "(accept, abort, terminal editing, paste, no-match guidance, multi, "
+        "source order, inert C0/C1 display, and explicit zh/ja/ko search)."
     )
     return 0
 

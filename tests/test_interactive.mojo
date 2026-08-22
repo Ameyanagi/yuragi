@@ -1,4 +1,11 @@
-from mojotui import InputEvent, KeyEvent, PasteEvent, text_width
+from mojotui import (
+    InputEvent,
+    KeyEvent,
+    PasteEvent,
+    Selection,
+    SelectionSet,
+    text_width,
+)
 from std.collections import List
 from std.testing import TestSuite, assert_equal, assert_false, assert_true
 
@@ -171,6 +178,77 @@ def test_editor_cursor_delete_home_end_and_history_commands() raises:
     assert_equal(_query_text(model), "b")
 
 
+def test_terminal_control_motion_bindings_are_grapheme_safe() raises:
+    var candidates: List[Candidate] = [Candidate(0, String("a界🙂b"))]
+    var model = _seeded_model(candidates^, String("a界🙂b"))
+    var before = model.input.engine.document.version
+
+    assert_false(_handle_key(model, KeyEvent.character("a", KeyEvent.CONTROL)))
+    var selection = model.input.engine.selections.primary_selection()
+    assert_true(selection.is_empty())
+    assert_equal(selection.head, 0)
+
+    assert_false(_handle_key(model, KeyEvent.character("f", KeyEvent.CONTROL)))
+    assert_equal(model.input.engine.selections.primary_selection().head, 1)
+    assert_false(_handle_key(model, KeyEvent.character("f", KeyEvent.CONTROL)))
+    assert_equal(model.input.engine.selections.primary_selection().head, 4)
+
+    assert_false(_handle_key(model, KeyEvent.character("e", KeyEvent.CONTROL)))
+    assert_equal(model.input.engine.selections.primary_selection().head, 9)
+    assert_false(_handle_key(model, KeyEvent.character("b", KeyEvent.CONTROL)))
+    assert_equal(model.input.engine.selections.primary_selection().head, 8)
+    assert_equal(model.input.engine.document.version, before)
+    assert_equal(_query_text(model), "a界🙂b")
+
+
+def test_terminal_control_deletes_are_single_undoable_transactions() raises:
+    var candidates: List[Candidate] = [Candidate(0, String("a界🙂b"))]
+    var model = _seeded_model(candidates^, String("a界🙂b"))
+
+    assert_false(_handle_key(model, KeyEvent.character("b", KeyEvent.CONTROL)))
+    var before = model.input.engine.document.version
+    assert_false(_handle_key(model, KeyEvent.character("h", KeyEvent.CONTROL)))
+    assert_equal(model.input.engine.document.version, before + 1)
+    assert_equal(_query_text(model), "a界b")
+    assert_false(_handle_key(model, KeyEvent.character("z", KeyEvent.CONTROL)))
+    assert_equal(_query_text(model), "a界🙂b")
+
+    assert_false(_handle_key(model, KeyEvent.character("a", KeyEvent.CONTROL)))
+    assert_false(_handle_key(model, KeyEvent.character("f", KeyEvent.CONTROL)))
+    before = model.input.engine.document.version
+    assert_false(_handle_key(model, KeyEvent.character("d", KeyEvent.CONTROL)))
+    assert_equal(model.input.engine.document.version, before + 1)
+    assert_equal(_query_text(model), "a🙂b")
+    assert_false(_handle_key(model, KeyEvent.character("z", KeyEvent.CONTROL)))
+    assert_equal(_query_text(model), "a界🙂b")
+
+    assert_false(_handle_key(model, KeyEvent.character("a", KeyEvent.CONTROL)))
+    assert_false(_handle_key(model, KeyEvent.character("f", KeyEvent.CONTROL)))
+    assert_false(_handle_key(model, KeyEvent.character("f", KeyEvent.CONTROL)))
+    before = model.input.engine.document.version
+    assert_false(_handle_key(model, KeyEvent.character("k", KeyEvent.CONTROL)))
+    assert_equal(model.input.engine.document.version, before + 1)
+    assert_equal(_query_text(model), "a界")
+    assert_false(_handle_key(model, KeyEvent.character("z", KeyEvent.CONTROL)))
+    assert_equal(_query_text(model), "a界🙂b")
+
+    assert_false(_handle_key(model, KeyEvent.character("e", KeyEvent.CONTROL)))
+    before = model.input.engine.document.version
+    assert_false(_handle_key(model, KeyEvent.character("k", KeyEvent.CONTROL)))
+    assert_equal(model.input.engine.document.version, before)
+
+
+def test_default_control_cut_and_paste_bindings_remain_available() raises:
+    var candidates = candidates_from_text("abc\nother\n")
+    var model = _seeded_model(candidates^, String("abc"))
+    model.input.engine.selections = SelectionSet([Selection(0, 1)])
+
+    assert_false(_handle_key(model, KeyEvent.character("x", KeyEvent.CONTROL)))
+    assert_equal(_query_text(model), "bc")
+    assert_false(_handle_key(model, KeyEvent.character("v", KeyEvent.CONTROL)))
+    assert_equal(_query_text(model), "abc")
+
+
 def test_shift_text_is_accepted_but_alt_characters_do_not_leak() raises:
     var candidates = candidates_from_text("alpha\n")
     var model = _model(candidates^)
@@ -294,6 +372,50 @@ def test_candidate_display_replaces_terminal_controls_one_for_one() raises:
     assert_equal(display, "a␀␉␊␍␛␡界🙂b")
     assert_equal(display.count_codepoints(), source.count_codepoints())
     assert_equal(text_width(display), 12)
+
+
+def test_candidate_display_escapes_c1_and_projects_highlights() raises:
+    var source = String(
+        "a",
+        chr(0x80),
+        chr(0x9B),
+        chr(0x9F),
+        "界",
+    )
+    var expected = String(
+        "a",
+        "\\",
+        "u{0080}",
+        "\\",
+        "u{009B}",
+        "\\",
+        "u{009F}",
+        "界",
+    )
+    assert_equal(_display_text(source), expected)
+    assert_equal(text_width(expected), 27)
+
+    var identity_candidates: List[Candidate] = [Candidate(7, source.copy())]
+    var session = FinderSession(identity_candidates^, Options())
+    assert_equal(_item_line(session._model, 0).spans[0].content, expected)
+    assert_true(_handle_key(session._model, KeyEvent.named(KeyEvent.ENTER)))
+    var selected = session.selection()
+    assert_equal(selected[0].source_index, 7)
+    assert_equal(selected[0].text, source)
+
+    var ranked_candidates: List[Candidate] = [Candidate(7, source.copy())]
+    var model = _seeded_model(ranked_candidates^, chr(0x9B))
+    var line = _item_line(model, 0)
+    assert_equal(len(line.spans), 3)
+    assert_equal(
+        line.spans[0].content,
+        String("a", "\\", "u{0080}"),
+    )
+    assert_equal(line.spans[1].content, String("\\", "u{009B}"))
+    assert_equal(
+        line.spans[2].content,
+        String("\\", "u{009F}", "界"),
+    )
 
 
 def test_candidate_display_keeps_rows_distinct_and_source_bytes_unchanged() raises:
