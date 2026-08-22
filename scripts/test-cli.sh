@@ -105,7 +105,7 @@ if ! grep -Fxq \
   exit 1
 fi
 if ! grep -Fxq \
-  '      --no-ignore-case  match case-sensitively' \
+  '  +i, --no-ignore-case  match case-sensitively' \
   <<<"$help_text"; then
   echo "--no-ignore-case help description is not column-aligned" >&2
   exit 1
@@ -134,6 +134,98 @@ if ! grep -Fxq \
   echo "CLI help is missing the documented exit-code contract" >&2
   exit 1
 fi
+
+# POSIX cksum plus byte length pins each generated integration script exactly,
+# while syntax checks catch errors that a stable but invalid fixture would miss.
+shell_names=(bash zsh fish powershell)
+shell_checksums=(
+  '2958611478 2535'
+  '1613825818 2465'
+  '4250646206 2398'
+  '874700008 3520'
+)
+for index in "${!shell_names[@]}"; do
+  shell_name="${shell_names[$index]}"
+  .pixi/bin/yuragi shell "$shell_name" \
+    >"$test_dir/$shell_name-script" 2>"$test_dir/$shell_name-stderr"
+  actual_checksum="$(cksum "$test_dir/$shell_name-script" | awk '{print $1 " " $2}')"
+  if [[ "$actual_checksum" != "${shell_checksums[$index]}" ]] || \
+    [[ -s "$test_dir/$shell_name-stderr" ]]; then
+    echo "$shell_name integration changed from its byte-exact fixture" >&2
+    exit 1
+  fi
+done
+bash -n "$test_dir/bash-script"
+if command -v zsh >/dev/null 2>&1; then
+  zsh -n "$test_dir/zsh-script"
+fi
+
+config_path="$(
+  YURAGI_CONFIG_FILE=/explicit/yuragi.toml \
+  XDG_CONFIG_HOME=/ignored-xdg HOME=/ignored-home \
+  .pixi/bin/yuragi config path
+)"
+if [[ "$config_path" != /explicit/yuragi.toml ]]; then
+  echo 'YURAGI_CONFIG_FILE must win config path precedence' >&2
+  exit 1
+fi
+config_path="$(
+  env -u YURAGI_CONFIG_FILE XDG_CONFIG_HOME=/xdg HOME=/ignored-home \
+    .pixi/bin/yuragi config path
+)"
+if [[ "$config_path" != /xdg/yuragi/config.toml ]]; then
+  echo 'XDG_CONFIG_HOME must win HOME config path precedence' >&2
+  exit 1
+fi
+config_path="$(
+  env -u YURAGI_CONFIG_FILE -u XDG_CONFIG_HOME HOME=/home/person \
+    .pixi/bin/yuragi config path
+)"
+if [[ "$config_path" != /home/person/.config/yuragi/config.toml ]]; then
+  echo 'HOME config path fallback changed' >&2
+  exit 1
+fi
+
+set +e
+env -u YURAGI_CONFIG_FILE -u XDG_CONFIG_HOME -u HOME \
+  .pixi/bin/yuragi config path \
+  >"$test_dir/config-path-stdout" 2>"$test_dir/config-path-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/config-path-stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: config error: configuration path requires YURAGI_CONFIG_FILE, XDG_CONFIG_HOME, or HOME; set one of those environment variables' \
+    "$test_dir/config-path-stderr"; then
+  echo 'unresolved config path must be an operational exit-2 error' >&2
+  exit 1
+fi
+
+doctor_config_home="$test_dir/doctor-config"
+set +e
+env -u YURAGI_CONFIG_FILE -u SHELL \
+  XDG_CONFIG_HOME="$doctor_config_home" HOME=/ignored PATH='' \
+  .pixi/bin/yuragi doctor \
+  >"$test_dir/doctor-stdout" 2>"$test_dir/doctor-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 0 ]] || [[ -s "$test_dir/doctor-stderr" ]]; then
+  echo 'doctor warnings must remain a successful read-only diagnostic' >&2
+  exit 1
+fi
+printf '%s\n' \
+  'Yuragi doctor' \
+  'ok version: 0.0.0' \
+  'ok executable: running' \
+  "info config path: $doctor_config_home/yuragi/config.toml" \
+  'info config file: absent; loading is not enabled in this release' \
+  'warn shell hint: SHELL is not set' \
+  'warn path finder: fd, fdfind, and find were not found on PATH' \
+  'info shell scripts: dependencies are checked when each binding runs' \
+  >"$test_dir/doctor-expected"
+if ! cmp -s "$test_dir/doctor-expected" "$test_dir/doctor-stdout"; then
+  echo 'doctor warning report changed from its exact fixture' >&2
+  exit 1
+fi
 if [[ "$(.pixi/bin/yuragi --version --help)" != "$help_text" ]] || \
   [[ "$(.pixi/bin/yuragi --help --version)" != "$help_text" ]]; then
   echo "--help must win over --version regardless of their order" >&2
@@ -150,7 +242,9 @@ if [[ $exit_code -ne 2 ]]; then
   exit 1
 fi
 if [[ -s "$test_dir/stdout" ]] || \
-  ! grep -Fxq 'yuragi: unknown argument: --unknown' "$test_dir/stderr"; then
+  ! grep -Fxq \
+    "yuragi: unknown argument '--unknown' (try 'yuragi --help')" \
+    "$test_dir/stderr"; then
   echo "invalid-option precedence did not produce its exact diagnostic" >&2
   exit 1
 fi
@@ -160,22 +254,20 @@ set +e
   >"$test_dir/stdout" 2>"$test_dir/stderr"
 exit_code=$?
 set -e
-if [[ $exit_code -ne 2 ]] || \
-  ! grep -Fxq 'yuragi: --lang may be specified only once' "$test_dir/stderr"; then
-  echo "duplicate --lang must be rejected consistently before --help" >&2
+if [[ $exit_code -ne 0 ]] || [[ -s "$test_dir/stderr" ]] || \
+  [[ "$(<"$test_dir/stdout")" != "$help_text" ]]; then
+  echo "last-wins --lang parsing must allow --help to win" >&2
   exit 1
 fi
 
-set +e
-.pixi/bin/yuragi --filter x --ignore-case --no-ignore-case \
-  >"$test_dir/stdout" 2>"$test_dir/stderr"
-exit_code=$?
-set -e
-if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
-  ! grep -Fxq \
-    'yuragi: case sensitivity may be specified only once' \
-    "$test_dir/stderr"; then
-  echo "conflicting case flags must produce their exact diagnostic" >&2
+printf 'read\n' >"$test_dir/last-case-wins-expected"
+printf 'READ\nread\n' | \
+  .pixi/bin/yuragi --filter re --ignore-case --no-ignore-case \
+  >"$test_dir/last-case-wins-actual" 2>"$test_dir/last-case-wins-stderr"
+if ! cmp -s \
+  "$test_dir/last-case-wins-expected" "$test_dir/last-case-wins-actual" || \
+  [[ -s "$test_dir/last-case-wins-stderr" ]]; then
+  echo "the last case-sensitivity flag did not win" >&2
   exit 1
 fi
 
@@ -230,6 +322,15 @@ printf 'apple\nbanana\nbar\n' | .pixi/bin/yuragi --filter ba \
   >"$test_dir/ranked-actual" 2>"$test_dir/ranked-stderr"
 if ! cmp -s "$test_dir/ranked-expected" "$test_dir/ranked-actual"; then
   echo "ranked filtering produced unexpected candidates or ordering" >&2
+  exit 1
+fi
+
+printf 'banana\n' >"$test_dir/attached-filter-expected"
+printf 'apple\nbanana\n' | .pixi/bin/yuragi -fba \
+  >"$test_dir/attached-filter-actual" 2>"$test_dir/attached-filter-stderr"
+if ! cmp -s \
+  "$test_dir/attached-filter-expected" "$test_dir/attached-filter-actual"; then
+  echo "attached -f query did not select banana" >&2
   exit 1
 fi
 
@@ -377,6 +478,19 @@ if ! grep -Fxq \
 fi
 
 set +e
+.pixi/bin/yuragi --lang zh --filter '' </dev/null \
+  >"$test_dir/stdout" 2>"$test_dir/stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
+  ! grep -Fxq \
+    'yuragi: --lang zh phonetic matching awaits the Yomi integration; direct matching works without --lang' \
+    "$test_dir/stderr"; then
+  echo "empty-query phonetic filtering must explain the Yomi gate" >&2
+  exit 1
+fi
+
+set +e
 .pixi/bin/yuragi --filter ba --limit 0 \
   >"$test_dir/stdout" 2>"$test_dir/stderr"
 exit_code=$?
@@ -386,7 +500,7 @@ if [[ $exit_code -ne 2 ]]; then
   exit 1
 fi
 if [[ -s "$test_dir/stdout" ]] || ! grep -Fxq \
-  'yuragi: --limit requires a positive candidate count' \
+  "yuragi: invalid value '0' for --limit: the candidate count must be at least 1" \
   "$test_dir/stderr"; then
   echo "--limit 0 did not produce its exact diagnostic" >&2
   exit 1
@@ -418,22 +532,20 @@ if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
   exit 1
 fi
 
-set +e
-printf '\xff\n' | .pixi/bin/yuragi --filter '' \
-  >"$test_dir/stdout" 2>"$test_dir/stderr"
-exit_code=$?
-set -e
-if [[ $exit_code -ne 2 ]]; then
-  echo "invalid UTF-8 input must exit 2 (got $exit_code)" >&2
+printf 'caf\xef\xbf\xbd\napple\n' >"$test_dir/lossy-utf8-expected"
+printf 'caf\xff\napple\n' | .pixi/bin/yuragi --filter '' \
+  >"$test_dir/lossy-utf8-actual" 2>"$test_dir/lossy-utf8-stderr"
+if ! cmp -s "$test_dir/lossy-utf8-expected" "$test_dir/lossy-utf8-actual" || \
+  [[ -s "$test_dir/lossy-utf8-stderr" ]]; then
+  echo "invalid UTF-8 bytes were not replaced with U+FFFD" >&2
   exit 1
 fi
-if [[ -s "$test_dir/stdout" ]]; then
-  echo "invalid UTF-8 input produced candidate output" >&2
-  exit 1
-fi
-if ! grep -Fq 'yuragi: input error:' "$test_dir/stderr" || \
-  ! grep -Fq 'invalid UTF-8' "$test_dir/stderr"; then
-  echo "invalid UTF-8 input did not produce a useful diagnostic" >&2
+
+printf 'caf\xff\napple\n' | .pixi/bin/yuragi --filter a \
+  >"$test_dir/lossy-filter-actual" 2>"$test_dir/lossy-filter-stderr"
+if ! grep -Fxq 'apple' "$test_dir/lossy-filter-actual" || \
+  [[ -s "$test_dir/lossy-filter-stderr" ]]; then
+  echo "lossy UTF-8 input did not remain filterable" >&2
   exit 1
 fi
 

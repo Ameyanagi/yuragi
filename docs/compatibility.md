@@ -27,12 +27,19 @@ its first release. Each release names the exact compiler used to build it.
 
 ## Current CLI limitations
 
-- Standard input must be valid UTF-8 and is currently buffered in memory.
+- Standard input is buffered in memory and decoded lossily: each invalid UTF-8
+  byte becomes U+FFFD REPLACEMENT CHARACTER, matching fzf behavior.
 - `--filter ''` is implemented as identity selection.
-- Non-empty queries exit with status 2 until Moji, Hibana, and Yomi pass the
-  integration gates in `PLAN.md`.
-- Interactive mode, Windows line-oriented console behavior, configuration, and
-  shell bindings are not yet implemented.
+- Non-empty queries use Hibana's deterministic direct-text scorer and bounded
+  top-K retention. Explicit phonetic language modes remain gated on Yomi.
+- Interactive mode is implemented as an inline MojoTUI picker on the controlling
+  terminal, with identity-stable selection, query seeding, automation, and
+  multi-select. Search is still synchronous and input is indexed before opening.
+- The picker uses a fixed keymap and does not yet support `--bind`.
+- Preview, Windows line-oriented console behavior, configuration-file loading,
+  and built-in filesystem walking are not yet implemented. Read-only
+  configuration-path resolution plus generated Bash, Zsh, Fish, and PowerShell
+  bindings are available.
 
 ## CLI precedence
 
@@ -44,5 +51,7 @@ validly supplied, `--help` wins over `--version`, independent of flag order.
 ## Exit status
 
 - `0`: successful output or an informational mode;
-- `2`: invalid command-line usage or a requested mode that is not implemented;
-- `1`: input decoding, I/O, or unexpected internal/operational failure.
+- `1`: no noninteractive match or nothing to accept;
+- `2`: invalid command-line usage, standard-input I/O failure, unavailable mode, or
+  unexpected internal/operational failure;
+- `130`: interactive abort through Escape or Ctrl-C.

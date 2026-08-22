@@ -69,14 +69,33 @@ def test_initial_automation_composes_over_seeded_matches() raises:
     assert_equal(len(no_match.matches), 0)
 
 
-def test_initial_automation_empty_seed_uses_all_candidates() raises:
+def test_initial_automation_empty_seed_keeps_identity_rows_lazy() raises:
     var args: List[String] = ["yuragi", "--select-1", "--limit", "1"]
     var options = parse_options(args^)
     var candidates = candidates_from_text("first\nsecond\n")
     var decision = initial_automation(candidates, options)
 
     assert_true(decision.action == InitialAutomationAction.CONTINUE)
-    assert_equal(len(decision.matches), 2)
+    assert_equal(len(decision.matches), 0)
+    assert_equal(decision.total_matches, 2)
+
+
+def test_select_1_uses_total_matches_before_limit() raises:
+    var args: List[String] = [
+        "yuragi",
+        "--query",
+        "a",
+        "--select-1",
+        "--limit",
+        "1",
+    ]
+    var options = parse_options(args^)
+    var candidates = candidates_from_text("alpha\nbeta\n")
+    var decision = initial_automation(candidates, options)
+
+    assert_true(decision.action == InitialAutomationAction.CONTINUE)
+    assert_equal(len(decision.matches), 1)
+    assert_equal(decision.total_matches, 2)
 
 
 def test_accepts_interactive_mode_and_rejects_unavailable_phonetics() raises:
@@ -110,6 +129,22 @@ def test_accepts_interactive_mode_and_rejects_unavailable_phonetics() raises:
         )
     ):
         validate_foundation_mode(interactive_phonetic_options)
+
+    var empty_filter_phonetic: List[String] = [
+        "yuragi",
+        "--lang",
+        "zh",
+        "--filter",
+        "",
+    ]
+    var empty_filter_options = parse_options(empty_filter_phonetic^)
+    with assert_raises(
+        contains=(
+            "--lang zh phonetic matching awaits the Yomi integration; direct "
+            "matching works without --lang"
+        )
+    ):
+        validate_foundation_mode(empty_filter_options)
 
 
 def test_explain_mode_validation() raises:

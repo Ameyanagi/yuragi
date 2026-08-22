@@ -43,6 +43,13 @@ remains candidate data.
 - Rank non-empty direct matches through the installed Hibana package with a
   bounded top-K path. The documented ordering is score descending, then input
   order.
+- Own interactive candidates in one `SearchIndex`. Identical queries and safe
+  direct-text extensions scan only the previous complete exact match-ID set;
+  backspace, arbitrary edits, and case changes fall back to a full scan.
+- Keep the empty-query identity state lazy: retain exact cardinality and source
+  order without building one ranked row per candidate, materialize only the
+  visible viewport, and do not retain a redundant full-corpus identity-index
+  list.
 - Run the default no-`--filter` mode as a fixed-height inline MojoTUI picker
   behind `src/yuragi/interactive.mojo`. It reuses the Hibana ranking pipeline,
   keeps cursor identity by candidate source index across query refinements, and
@@ -107,7 +114,18 @@ Completed Yuragi work: the non-empty-query rejection is replaced by matcher
 orchestration, stable tie-breaking, bounded top-K selection, and byte-exact
 `--filter` CLI tests. Scoring remains entirely in Hibana.
 
-## Integration gate C — Yomi representation contract
+## Integration gate C — Yomi representation contract (source crossed; package pending)
+
+Yomi source now exposes typed, weighted candidate/query keys for Japanese,
+Korean, and Chinese, exact generated-to-source mappings, bounded Japanese
+candidate/query fanout, learned aliases, numeric readings, and explicit kind
+compatibility. Japanese candidate generation retains original and normalized
+base keys under an eight-key/1,024-byte default budget. Full NFKC and licensed
+Kanji readings remain declared provider gates rather than partial claims.
+
+The remaining entry criterion is publication of immutable `mojo-yomi` and the
+new prepared `mojo-hibana` version on every supported platform. Yuragi does not
+use sibling checkout imports while that publication is pending.
 
 Entry criteria:
 
@@ -121,7 +139,7 @@ Entry criteria:
   original-character highlighting positions.
 - Yuragi can pin an installable Yomi version.
 
-Yuragi work after the gate: generate direct and phonetic candidate views, merge
+Yuragi work after package publication: generate direct and phonetic candidate views, merge
 their Hibana results under a documented ranking policy, and prove that matches
 highlight the original CJK source ranges.
 
@@ -145,6 +163,11 @@ provides language-specific representations and does not choose for the user.
 6. Run `pixi run --locked check` on every supported CI target and build the
    Conda package from a clean source archive.
 7. Publish only after README and compatibility claims match observed behavior.
+
+The channel workflow must build both libraries from immutable tag refs for
+`osx-arm64`, `linux-64`, and `linux-aarch64`. Publish under new versions rather
+than replacing the hosted Hibana `0.0.0` artifact, then pin both versions and
+regenerate Yuragi's three-platform lock before enabling the integration.
 
 ## Later gates
 

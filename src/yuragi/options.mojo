@@ -3,8 +3,27 @@
 from hibana import CaseMode
 from std.collections import List
 
+from yuragi.shell import ShellKind
+
 
 comptime VERSION = "0.0.0"
+
+
+struct CommandKind(Copyable, Equatable, ImplicitlyCopyable):
+    """Top-level execution mode selected before candidate processing."""
+
+    var _value: Int
+
+    comptime FIND = CommandKind(_value=0)
+    comptime DOCTOR = CommandKind(_value=1)
+    comptime SHELL = CommandKind(_value=2)
+    comptime CONFIG_PATH = CommandKind(_value=3)
+
+    def __init__(out self, *, _value: Int):
+        self._value = _value
+
+    def __eq__(self, other: Self) -> Bool:
+        return self._value == other._value
 
 
 struct Options(Copyable):
@@ -27,6 +46,8 @@ struct Options(Copyable):
     var multi: Bool
     var help_requested: Bool
     var version_requested: Bool
+    var command: CommandKind
+    var shell: ShellKind
 
     def __init__(out self):
         self.has_filter = False
@@ -46,90 +67,145 @@ struct Options(Copyable):
         self.multi = False
         self.help_requested = False
         self.version_requested = False
+        self.command = CommandKind.FIND
+        self.shell = ShellKind.BASH
+
+
+def _parse_subcommand(args: List[String], mut options: Options) raises -> Bool:
+    if len(args) < 2:
+        return False
+    var command = args[1]
+    if command == "doctor":
+        if len(args) != 2:
+            raise Error("doctor accepts no arguments; got: ", args[2])
+        options.command = CommandKind.DOCTOR
+        return True
+    if command == "shell":
+        if len(args) < 3:
+            raise Error("shell requires one of: bash, zsh, fish, powershell")
+        if len(args) > 3:
+            raise Error("shell accepts one shell name; unexpected argument: ", args[3])
+        var shell = args[2]
+        if shell == "bash":
+            options.shell = ShellKind.BASH
+        elif shell == "zsh":
+            options.shell = ShellKind.ZSH
+        elif shell == "fish":
+            options.shell = ShellKind.FISH
+        elif shell == "powershell":
+            options.shell = ShellKind.POWERSHELL
+        else:
+            raise Error(
+                "unsupported shell: ",
+                shell,
+                "; choose bash, zsh, fish, or powershell",
+            )
+        options.command = CommandKind.SHELL
+        return True
+    if command == "config":
+        if len(args) < 3:
+            raise Error("config requires the path action; use: yuragi config path")
+        if args[2] != "path":
+            raise Error(
+                "unsupported config action: ",
+                args[2],
+                "; the only supported action is path",
+            )
+        if len(args) > 3:
+            raise Error("config path accepts no arguments; got: ", args[3])
+        options.command = CommandKind.CONFIG_PATH
+        return True
+    return False
 
 
 def _set_language(mut options: Options, value: StringSlice) raises:
-    if options.has_language:
-        raise Error("--lang may be specified only once")
     var language = String(value)
+    if language == "all" or language == "plain":
+        raise Error(
+            "--lang ",
+            language,
+            " is reserved to match yuru's register and is not yet supported",
+        )
     if (
         language != "auto"
         and language != "zh"
         and language != "ja"
         and language != "ko"
     ):
-        raise Error("--lang must be one of: auto, zh, ja, ko")
+        raise Error(
+            "invalid value '",
+            language,
+            "' for --lang (possible values: auto, zh, ja, ko)",
+        )
     options.has_language = True
     options.language = language^
 
 
-def _set_filter(mut options: Options, value: StringSlice) raises:
-    if options.has_filter:
-        raise Error("--filter may be specified only once")
+def _set_filter(mut options: Options, value: StringSlice):
     options.has_filter = True
     options.query = String(value)
 
 
-def _set_query(mut options: Options, value: StringSlice) raises:
-    if options.has_query:
-        raise Error("--query may be specified only once")
+def _set_query(mut options: Options, value: StringSlice):
     options.has_query = True
     options.query = String(value)
 
 
 def _set_limit(mut options: Options, value: StringSlice) raises:
-    if options.has_limit:
-        raise Error("--limit may be specified only once")
     var limit: Int
     try:
         limit = Int(String(value))
     except:
-        raise Error("--limit requires a positive candidate count")
+        var trimmed = value.strip()
+        var digits = trimmed
+        if trimmed.startswith("+"):
+            digits = trimmed.removeprefix("+")
+        if digits.byte_length() > 0 and digits.is_ascii_digit():
+            raise Error(
+                "invalid value '",
+                value,
+                "' for --limit: count exceeds the supported integer range",
+            )
+        raise Error(
+            "invalid value '",
+            value,
+            "' for --limit: expected a positive integer count (try 'yuragi --help')",
+        )
     if limit < 1:
-        raise Error("--limit requires a positive candidate count")
+        raise Error(
+            "invalid value '",
+            value,
+            "' for --limit: the candidate count must be at least 1",
+        )
     options.has_limit = True
     options.limit = limit
 
 
-def _set_read0(mut options: Options) raises:
-    if options.read0:
-        raise Error("--read0 may be specified only once")
+def _set_read0(mut options: Options):
     options.read0 = True
 
 
-def _set_print0(mut options: Options) raises:
-    if options.print0:
-        raise Error("--print0 may be specified only once")
+def _set_print0(mut options: Options):
     options.print0 = True
 
 
-def _set_explain(mut options: Options) raises:
-    if options.explain:
-        raise Error("--explain may be specified only once")
+def _set_explain(mut options: Options):
     options.explain = True
 
 
-def _set_select_1(mut options: Options) raises:
-    if options.select_1:
-        raise Error("--select-1 may be specified only once")
+def _set_select_1(mut options: Options):
     options.select_1 = True
 
 
-def _set_exit_0(mut options: Options) raises:
-    if options.exit_0:
-        raise Error("--exit-0 may be specified only once")
+def _set_exit_0(mut options: Options):
     options.exit_0 = True
 
 
-def _set_multi(mut options: Options) raises:
-    if options.multi:
-        raise Error("--multi may be specified only once")
+def _set_multi(mut options: Options):
     options.multi = True
 
 
-def _set_case_mode(mut options: Options, case_mode: CaseMode) raises:
-    if options.has_case_override:
-        raise Error("case sensitivity may be specified only once")
+def _set_case_mode(mut options: Options, case_mode: CaseMode):
     options.has_case_override = True
     options.case_mode = case_mode
 
@@ -148,6 +224,8 @@ def _validate_options(options: Options) raises:
 def parse_options(args: List[String]) raises -> Options:
     """Parse all argv before applying help/version execution precedence."""
     var options = Options()
+    if _parse_subcommand(args, options):
+        return options^
     var index = 1
     while index < len(args):
         var argument = String(args[index])
@@ -162,6 +240,8 @@ def parse_options(args: List[String]) raises -> Options:
             _set_filter(options, args[index])
         elif argument.startswith("--filter="):
             _set_filter(options, argument.removeprefix("--filter="))
+        elif argument.startswith("-f") and argument.byte_length() > 2:
+            _set_filter(options, argument.removeprefix("-f"))
         elif argument == "--query" or argument == "-q":
             if index + 1 >= len(args):
                 raise Error("--query requires a query")
@@ -169,6 +249,8 @@ def parse_options(args: List[String]) raises -> Options:
             _set_query(options, args[index])
         elif argument.startswith("--query="):
             _set_query(options, argument.removeprefix("--query="))
+        elif argument.startswith("-q") and argument.byte_length() > 2:
+            _set_query(options, argument.removeprefix("-q"))
         elif argument == "--limit":
             if index + 1 >= len(args):
                 raise Error("--limit requires a positive candidate count")
@@ -197,10 +279,10 @@ def parse_options(args: List[String]) raises -> Options:
             _set_multi(options)
         elif argument == "--ignore-case" or argument == "-i":
             _set_case_mode(options, CaseMode.IGNORE_ASCII)
-        elif argument == "--no-ignore-case":
+        elif argument == "--no-ignore-case" or argument == "+i":
             _set_case_mode(options, CaseMode.EXACT)
         else:
-            raise Error("unknown argument: ", argument)
+            raise Error("unknown argument '", argument, "' (try 'yuragi --help')")
         index += 1
     _validate_options(options)
     return options^
@@ -211,6 +293,9 @@ def usage() -> String:
     return String(
         "Usage: yuragi [--filter QUERY | --query QUERY] [--limit N]\n"
         "              [--lang auto|zh|ja|ko] [options]\n"
+        "       yuragi doctor\n"
+        "       yuragi shell bash|zsh|fish|powershell\n"
+        "       yuragi config path\n"
         "\n"
         "Read newline-delimited candidates from standard input and write selected\n"
         "candidates to standard output. Without --filter, open an inline picker;\n"
@@ -228,12 +313,17 @@ def usage() -> String:
         "      --limit N         emit at most N best-ranked candidates\n"
         "      --lang LANGUAGE   phonetic language hint (default: auto)\n"
         "  -i, --ignore-case     match case-insensitively (ASCII)\n"
-        "      --no-ignore-case  match case-sensitively\n"
+        "  +i, --no-ignore-case  match case-sensitively\n"
         "      --read0           read NUL-delimited candidates from standard input\n"
         "      --print0          write NUL-delimited candidates to standard output\n"
         "      --explain         print rank, score, key kind, and match positions\n"
         "  -h, --help            show this help\n"
         "      --version         show the version\n"
+        "\n"
+        "Commands:\n"
+        "  doctor                report environment and workflow dependencies\n"
+        "  shell SHELL           print Ctrl-T, Ctrl-R, Alt-C, and ** integration\n"
+        "  config path           print the reserved config path (loading disabled)\n"
         "\n"
         "Interactive flag matrix: --query seeds the prompt; --select-1\n"
         "auto-accepts and prints a sole initial match; --exit-0 exits 1\n"
@@ -243,6 +333,7 @@ def usage() -> String:
         "and are usage errors with --filter.\n"
         "Keybindings: Enter accepts; TAB marks and moves down; Shift-TAB marks\n"
         "and moves up in --multi mode. Both are inert without --multi.\n"
+        "Ctrl-U clears the query; Ctrl-W deletes the trailing word.\n"
         "\n"
         "Invalid options exit before informational modes. If both --help and\n"
         "--version are validly supplied, --help wins.\n"

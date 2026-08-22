@@ -327,6 +327,72 @@ def drive_control_c(
     os.write(master, b"\x03")
 
 
+def drive_control_u_clears_query(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    wait_for_initial_picker(name, master, slave, process, output, screen)
+    os.write(master, b"br")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "query 'br'",
+        lambda current: current.line(0).startswith("> br"),
+    )
+    os.write(master, b"\x15")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "empty query with counter 3/3 after Ctrl-U",
+        lambda current: current.line(0) == ">"
+        and current.line(1).startswith("3/3"),
+    )
+    os.write(master, b"\x1b")
+
+
+def drive_control_w_deletes_word(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    wait_for_initial_picker(name, master, slave, process, output, screen)
+    os.write(master, b"br")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "query 'br'",
+        lambda current: current.line(0).startswith("> br"),
+    )
+    os.write(master, b"\x17")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "empty query with counter 3/3 after Ctrl-W",
+        lambda current: current.line(0) == ">"
+        and current.line(1).startswith("3/3"),
+    )
+    os.write(master, b"\x1b")
+
+
 def drive_multi(
     name: str,
     master: int,
@@ -534,6 +600,22 @@ def main() -> int:
     run_case(binary, "control-c aborts", [], b"", 130, driver=drive_control_c)
     run_case(
         binary,
+        "control-u clears query",
+        [],
+        b"",
+        130,
+        driver=drive_control_u_clears_query,
+    )
+    run_case(
+        binary,
+        "control-w deletes word",
+        [],
+        b"",
+        130,
+        driver=drive_control_w_deletes_word,
+    )
+    run_case(
+        binary,
         "select-1 accepts initial match",
         ["--select-1", "--query", "charlie"],
         b"charlie\n",
@@ -564,7 +646,8 @@ def main() -> int:
     )
     print(
         "Interactive PTY tests passed "
-        "(accept, ESC, Ctrl-C, select-1, exit-0, multi, source order)."
+        "(accept, ESC, Ctrl-C, Ctrl-U, Ctrl-W, select-1, exit-0, multi, "
+        "source order)."
     )
     return 0
 

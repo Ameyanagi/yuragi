@@ -10,5 +10,12 @@
 6. Build the recipe and verify its installed-package smoke test.
 7. Publish benchmark results only with the checked-in methodology.
 
+For the prepared/CJK search release, publish new immutable Hibana and Yomi
+versions first on `osx-arm64`, `linux-64`, and `linux-aarch64`. Never overwrite
+the hosted Hibana `0.0.0` filename with different contents. Pin the new
+`mojo-hibana` and `mojo-yomi` versions in both Pixi and the Yuragi recipe,
+regenerate the three-platform lock, and add installed-package CJK/prepared-search
+CLI smoke coverage before tagging Yuragi.
+
 The tag workflow creates a source archive after the supported CI matrix passes.
 Publishing to modular-community is a separate reviewed operation.

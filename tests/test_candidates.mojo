@@ -3,7 +3,6 @@ from std.testing import (
     TestSuite,
     assert_equal,
     assert_false,
-    assert_raises,
     assert_true,
 )
 
@@ -14,6 +13,13 @@ from yuragi.candidate import (
     candidates_from_text,
     render_candidates,
 )
+
+
+def _candidate_text_from_bytes(var bytes: List[UInt8]) -> String:
+    var input = CandidateInputBuffer()
+    input.append_chunk(bytes[:])
+    var candidates = input.candidates()
+    return String(candidates[0].text)
 
 
 def test_ingests_unicode_and_preserves_order() raises:
@@ -70,11 +76,6 @@ def test_utf8_is_decoded_only_after_controlled_chunks_are_aggregated() raises:
     second.append(UInt8(ord("d")))
     second.append(UInt8(ord("\n")))
 
-    var partial = CandidateInputBuffer()
-    partial.append_chunk(first[:])
-    with assert_raises(contains="invalid UTF-8"):
-        _ = partial.candidates()
-
     var input = CandidateInputBuffer()
     input.append_chunk(first[:])
     input.append_chunk(second[:])
@@ -91,6 +92,38 @@ def test_utf8_is_decoded_only_after_controlled_chunks_are_aggregated() raises:
     assert_equal(first_text_bytes[4097], UInt8(0x8C))
     assert_equal(candidates[1].source_index, 1)
     assert_equal(candidates[1].text, "second")
+
+
+def test_invalid_utf8_lead_byte_is_replaced_lossily() raises:
+    var bytes: List[UInt8] = [
+        UInt8(ord("c")),
+        UInt8(ord("a")),
+        UInt8(ord("f")),
+        UInt8(0xFF),
+    ]
+    assert_equal(_candidate_text_from_bytes(bytes^), "caf�")
+
+
+def test_truncated_utf8_sequence_replaces_each_byte() raises:
+    var bytes: List[UInt8] = [UInt8(0xE2), UInt8(0x82)]
+    assert_equal(_candidate_text_from_bytes(bytes^), "��")
+
+
+def test_overlong_utf8_sequence_replaces_each_byte() raises:
+    var bytes: List[UInt8] = [UInt8(0xC0), UInt8(0xAF)]
+    assert_equal(_candidate_text_from_bytes(bytes^), "��")
+
+
+def test_valid_cjk_utf8_passes_through_untouched() raises:
+    var bytes: List[UInt8] = [
+        UInt8(0xE5),
+        UInt8(0x8C),
+        UInt8(0x97),
+        UInt8(0xE4),
+        UInt8(0xBA),
+        UInt8(0xAC),
+    ]
+    assert_equal(_candidate_text_from_bytes(bytes^), "北京")
 
 
 def test_render_is_newline_delimited() raises:

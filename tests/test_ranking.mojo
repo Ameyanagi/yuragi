@@ -5,7 +5,7 @@ from std.collections import List
 from std.testing import TestSuite, assert_equal, assert_false, assert_true
 
 from yuragi.candidate import Candidate, candidates_from_text
-from yuragi.ranking import RankedCandidate, rank_candidates
+from yuragi.ranking import RankedCandidate, rank_candidates, rank_candidates_page
 
 
 def test_ranked_order_keeps_only_matches() raises:
@@ -35,6 +35,15 @@ def test_k_bounds_the_result() raises:
 
     assert_equal(len(ranked), 1)
     assert_equal(ranked[0].text, "banana")
+
+
+def test_page_counts_matches_before_top_k_truncation() raises:
+    var candidates = candidates_from_text("apple\nbanana\nbar\n")
+    var page = rank_candidates_page(candidates, Matcher("ba"), 1)
+
+    assert_equal(len(page.rows), 1)
+    assert_equal(page.rows[0].text, "banana")
+    assert_equal(page.total_matches, 2)
 
 
 def test_empty_candidate_span_avoids_top_k_construction() raises:
