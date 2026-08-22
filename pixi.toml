@@ -10,6 +10,7 @@ platforms = ["osx-arm64", "linux-64", "linux-aarch64"]
 version = "0.1.0"
 
 [tasks]
+bench-cjk = { cmd = "mkdir -p .pixi/bin && mojo build --Werror -O3 -I src benchmarks/bench_cjk_search.mojo -o .pixi/bin/bench-cjk && .pixi/bin/bench-cjk", description = "Run the locked cjk-search-v1 profiling protocol" }
 bench-fair = { cmd = "mojo run --Werror -I src benchmarks/bench_fair_compare.mojo", description = "Run the fair Yuru/Yuragi plain-search comparison protocol" }
 bench-interactive-state = { cmd = "mojo run --Werror -I src benchmarks/bench_interactive_state.mojo", description = "Profile empty-query interactive state construction and copying" }
 bench-search = { cmd = "mojo run --Werror -I src benchmarks/bench_search.mojo", description = "Benchmark bounded interactive search orchestration" }
