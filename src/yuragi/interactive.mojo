@@ -315,8 +315,35 @@ def _clear_query(mut model: _FinderModel) raises -> Bool:
     return _apply_editor_command(model, EditorCommand.insert(""))
 
 
+def _is_unicode_whitespace(value: Int) -> Bool:
+    """Return whether a scalar has Unicode 17's White_Space property."""
+    return (
+        (value >= 0x9 and value <= 0xD)
+        or value == 0x20
+        or value == 0x85
+        or value == 0xA0
+        or value == 0x1680
+        or (value >= 0x2000 and value <= 0x200A)
+        or value == 0x2028
+        or value == 0x2029
+        or value == 0x202F
+        or value == 0x205F
+        or value == 0x3000
+    )
+
+
+def _grapheme_is_whitespace(grapheme: StringSlice) -> Bool:
+    """Classify one extended grapheme without splitting its byte range."""
+    var scalar_count = 0
+    for scalar in grapheme.codepoints():
+        scalar_count += 1
+        if not _is_unicode_whitespace(Int(scalar.to_u32())):
+            return False
+    return scalar_count > 0
+
+
 def _delete_previous_word(mut model: _FinderModel) raises -> Bool:
-    """Delete one whitespace-delimited word as one undoable transaction."""
+    """Delete one Unicode-whitespace-delimited word as one transaction."""
     var selection = model.input.engine.selections.primary_selection()
     if not selection.is_empty():
         return _apply_editor_command(
@@ -326,16 +353,27 @@ def _delete_previous_word(mut model: _FinderModel) raises -> Bool:
     if cursor == 0:
         return False
     var text = _query_text(model)
-    var bytes = text.as_bytes()
+    var starts = MojoList[Int]()
+    var whitespace = MojoList[Bool]()
+    var byte_offset = 0
+    for grapheme in text.graphemes():
+        var end = byte_offset + grapheme.byte_length()
+        if end > cursor:
+            break
+        starts.append(byte_offset)
+        whitespace.append(_grapheme_is_whitespace(grapheme))
+        byte_offset = end
+    if len(starts) == 0:
+        return False
+
+    var grapheme_index = len(starts) - 1
     var start = cursor
-    while start > 0 and (
-        bytes[start - 1] == UInt8(ord(" ")) or bytes[start - 1] == UInt8(ord("\t"))
-    ):
-        start -= 1
-    while start > 0 and (
-        bytes[start - 1] != UInt8(ord(" ")) and bytes[start - 1] != UInt8(ord("\t"))
-    ):
-        start -= 1
+    while grapheme_index >= 0 and whitespace[grapheme_index]:
+        start = starts[grapheme_index]
+        grapheme_index -= 1
+    while grapheme_index >= 0 and not whitespace[grapheme_index]:
+        start = starts[grapheme_index]
+        grapheme_index -= 1
     model.input.engine.selections = SelectionSet([Selection(start, cursor)])
     return _apply_editor_command(model, EditorCommand.insert(""))
 
@@ -406,21 +444,36 @@ def _handle_key(mut model: _FinderModel, key: KeyEvent) raises -> Bool:
     return False
 
 
+def _display_text(text: StringSlice) -> String:
+    """Replace terminal controls one-for-one without changing source text."""
+    var display = String()
+    for scalar in text.codepoints():
+        var value = Int(scalar.to_u32())
+        if value >= 0 and value <= 0x1F:
+            display += chr(0x2400 + value)
+        elif value == 0x7F:
+            display += chr(0x2421)
+        else:
+            display.append(scalar)
+    return display^
+
+
 def _item_line(model: _FinderModel, index: Int) raises -> Line:
     var patch = StylePatch(
         foreground=Color.indexed(6),
         add_modifiers=Style.BOLD,
     )
-    var text = (
+    var source_text = (
         model.index.copy_candidate_at(index)
         .text if model.identity_mode else model.matches[index]
         .text.copy()
     )
-    var line = Line.from_text(text.copy())
+    var display_text = _display_text(source_text)
+    var line = Line.from_text(display_text.copy())
     var query = _query_text(model)
     if query != "":
         line = Line.highlighted(
-            text^,
+            display_text^,
             model.matches[index].positions,
             patch,
         )

@@ -1,4 +1,4 @@
-from mojotui import InputEvent, KeyEvent, PasteEvent
+from mojotui import InputEvent, KeyEvent, PasteEvent, text_width
 from std.collections import List
 from std.testing import TestSuite, assert_equal, assert_false, assert_true
 
@@ -9,6 +9,7 @@ from yuragi.interactive import (
     _FinderApplication,
     _FinderModel,
     _counter_text,
+    _display_text,
     _handle_key,
     _is_marked,
     _item_line,
@@ -102,6 +103,51 @@ def test_control_w_deletes_the_trailing_word() raises:
     )
     assert_equal(_query_text(solo_model), "")
     assert_equal(_match_count(solo_model), 3)
+
+
+def _assert_control_w_transaction(query: String, expected: String) raises:
+    var original = query.copy()
+    var candidates: List[Candidate] = [Candidate(0, query.copy())]
+    var model = _seeded_model(candidates^, query.copy())
+    var before = model.input.engine.document.version
+
+    assert_false(
+        _handle_key(
+            model,
+            KeyEvent.character(String("w"), KeyEvent.CONTROL),
+        )
+    )
+    assert_equal(model.input.engine.document.version, before + 1)
+    assert_equal(_query_text(model), expected)
+
+    assert_false(
+        _handle_key(
+            model,
+            KeyEvent.character(String("z"), KeyEvent.CONTROL),
+        )
+    )
+    assert_equal(_query_text(model), original)
+
+
+def test_control_w_uses_unicode_whitespace_and_grapheme_boundaries() raises:
+    _assert_control_w_transaction(String("one two"), String("one "))
+    _assert_control_w_transaction(String("one\ttwo"), String("one\t"))
+    _assert_control_w_transaction(
+        String("one", chr(0x3000), "two"),
+        String("one", chr(0x3000)),
+    )
+    _assert_control_w_transaction(
+        String("one", chr(0xA0), "two"),
+        String("one", chr(0xA0)),
+    )
+    _assert_control_w_transaction(
+        String("検索", chr(0x3000), "東京🙂"),
+        String("検索", chr(0x3000)),
+    )
+    _assert_control_w_transaction(
+        String("検索🙂", chr(0x3000)),
+        String(),
+    )
 
 
 def test_editor_cursor_delete_home_end_and_history_commands() raises:
@@ -231,6 +277,54 @@ def test_multi_render_shows_marker_and_marked_count() raises:
         _counter_text(model),
         "lang=auto matches=2/2 retained=2 shown=2 marks=1",
     )
+
+
+def test_candidate_display_replaces_terminal_controls_one_for_one() raises:
+    var source = String(
+        "a",
+        chr(0),
+        chr(9),
+        chr(10),
+        chr(13),
+        chr(0x1B),
+        chr(0x7F),
+        "界🙂b",
+    )
+    var display = _display_text(source)
+    assert_equal(display, "a␀␉␊␍␛␡界🙂b")
+    assert_equal(display.count_codepoints(), source.count_codepoints())
+    assert_equal(text_width(display), 12)
+
+
+def test_candidate_display_keeps_rows_distinct_and_source_bytes_unchanged() raises:
+    var candidates: List[Candidate] = [
+        Candidate(0, String("a\nb")),
+        Candidate(1, String("ab")),
+    ]
+    var session = FinderSession(candidates^, Options())
+    assert_equal(_item_line(session._model, 0).spans[0].content, "a␊b")
+    assert_equal(_item_line(session._model, 1).spans[0].content, "ab")
+
+    assert_true(_handle_key(session._model, KeyEvent.named(KeyEvent.ENTER)))
+    var selected = session.selection()
+    assert_equal(len(selected), 1)
+    assert_equal(selected[0].source_index, 0)
+    assert_equal(selected[0].text, "a\nb")
+
+
+def test_candidate_display_preserves_scalar_highlight_positions() raises:
+    var candidates: List[Candidate] = [
+        Candidate(0, String("a\n界🙂b")),
+    ]
+    var model = _seeded_model(candidates^, String("界"))
+    var line = _item_line(model, 0)
+    assert_equal(len(line.spans), 3)
+    assert_equal(line.spans[0].content, "a␊")
+    assert_equal(line.spans[1].content, "界")
+    assert_equal(line.spans[2].content, "🙂b")
+    assert_equal(text_width(line.spans[0].content), 2)
+    assert_equal(text_width(line.spans[1].content), 2)
+    assert_equal(text_width(line.spans[2].content), 3)
 
 
 def test_multi_marks_survive_query_refinement() raises:

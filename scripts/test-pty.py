@@ -12,6 +12,7 @@ import subprocess
 import sys
 import termios
 import time
+import unicodedata
 from pathlib import Path
 from typing import Callable
 
@@ -32,6 +33,7 @@ class TerminalScreen:
         self.saved_row = 0
         self.saved_column = 0
         self.pending = bytearray()
+        self.utf8_pending = bytearray()
 
     def feed(self, data: bytes) -> None:
         self.pending.extend(data)
@@ -116,6 +118,19 @@ class TerminalScreen:
             self.column = self.saved_column
 
     def _consume_byte(self, value: int) -> None:
+        if self.utf8_pending or value >= 0x80:
+            self.utf8_pending.append(value)
+            try:
+                text = self.utf8_pending.decode("utf-8")
+            except UnicodeDecodeError as error:
+                if error.reason == "unexpected end of data":
+                    return
+                self.utf8_pending.clear()
+                return
+            self.utf8_pending.clear()
+            for character in text:
+                self._write_character(character)
+            return
         if value == 0x0D:
             self.column = 0
         elif value == 0x0A:
@@ -125,8 +140,20 @@ class TerminalScreen:
         elif value == 0x09:
             self.column = min((self.column // 8 + 1) * 8, self.columns - 1)
         elif 0x20 <= value <= 0x7E:
-            self.cells[self.row][self.column] = chr(value)
-            self.column = min(self.column + 1, self.columns - 1)
+            self._write_character(chr(value))
+
+    def _write_character(self, character: str) -> None:
+        if unicodedata.combining(character) or unicodedata.category(character) in (
+            "Cf",
+            "Me",
+            "Mn",
+        ):
+            return
+        width = 2 if unicodedata.east_asian_width(character) in ("F", "W") else 1
+        self.cells[self.row][self.column] = character
+        if width == 2 and self.column + 1 < self.columns:
+            self.cells[self.row][self.column + 1] = ""
+        self.column = min(self.column + width, self.columns - 1)
 
     def line(self, row: int) -> str:
         return "".join(self.cells[row]).rstrip()
@@ -567,6 +594,67 @@ def drive_language_match(
     os.write(master, b"\r")
 
 
+def wait_for_control_candidates(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "distinct sanitized control candidate rows",
+        lambda current: current.line(1).startswith(
+            "lang=auto matches=2/2 retained=2 shown=2 marks=0"
+        )
+        and current.selected("a␊b")
+        and current.contains("ab"),
+    )
+    attributes = termios.tcgetattr(slave)
+    if int(attributes[3]) & (termios.ICANON | termios.ECHO):
+        fail(name, "controlling terminal did not enter raw mode", output, screen)
+
+
+def drive_read0_accepts_control_candidate(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    wait_for_control_candidates(name, master, slave, process, output, screen)
+    os.write(master, b"\r")
+
+
+def drive_read0_accepts_plain_candidate(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    wait_for_control_candidates(name, master, slave, process, output, screen)
+    os.write(master, b"\x1b[B")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "plain candidate selected independently of the control candidate",
+        lambda current: current.selected("ab")
+        and current.contains("a␊b"),
+    )
+    os.write(master, b"\r")
+
+
 def run_case(
     binary: Path,
     name: str,
@@ -738,6 +826,26 @@ def main() -> int:
     )
     run_case(
         binary,
+        "read0 selects embedded-newline candidate",
+        ["--read0", "--print0"],
+        b"a\nb\0",
+        0,
+        driver=drive_read0_accepts_control_candidate,
+        check_restoration=True,
+        candidates=b"a\nb\0ab\0",
+    )
+    run_case(
+        binary,
+        "read0 selects plain candidate independently",
+        ["--read0", "--print0"],
+        b"ab\0",
+        0,
+        driver=drive_read0_accepts_plain_candidate,
+        check_restoration=True,
+        candidates=b"a\nb\0ab\0",
+    )
+    run_case(
+        binary,
         "zh PTY phonetic",
         ["--lang", "zh", "--query", "bjdx"],
         "北京大学\n".encode(),
@@ -766,7 +874,7 @@ def main() -> int:
     print(
         "Interactive PTY tests passed "
         "(accept, abort, editor controls, paste, no-match guidance, multi, "
-        "source order, and explicit zh/ja/ko search)."
+        "source order, read0 controls, and explicit zh/ja/ko search)."
     )
     return 0
 
