@@ -87,7 +87,7 @@ if ! grep -Fxq \
   exit 1
 fi
 if ! grep -Fxq \
-  '      --lang LANGUAGE   phonetic language hint (default: auto)' \
+  '      --lang LANGUAGE   auto (direct), ja, zh, or ko (default: auto)' \
   <<<"$help_text"; then
   echo "--lang help description is not column-aligned" >&2
   exit 1
@@ -214,7 +214,7 @@ if [[ $exit_code -ne 0 ]] || [[ -s "$test_dir/doctor-stderr" ]]; then
 fi
 printf '%s\n' \
   'Yuragi doctor' \
-  'ok version: 0.0.0' \
+  'ok version: 0.1.0' \
   'ok executable: running' \
   "info config path: $doctor_config_home/yuragi/config.toml" \
   'info config file: absent; loading is not enabled in this release' \
@@ -380,6 +380,22 @@ if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/explain-print0-stdout" ]] || \
 fi
 
 printf '%s\n' \
+  'yuragi: --explain cannot be used with --read0 because a line-oriented TSV report cannot safely represent NUL-framed records' \
+  >"$test_dir/explain-read0-expected-stderr"
+set +e
+.pixi/bin/yuragi --filter ba --explain --read0 </dev/null \
+  >"$test_dir/explain-read0-stdout" \
+  2>"$test_dir/explain-read0-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/explain-read0-stdout" ]] || \
+  ! cmp -s "$test_dir/explain-read0-expected-stderr" \
+    "$test_dir/explain-read0-stderr"; then
+  echo "--explain with --read0 must reject unsafe line reporting" >&2
+  exit 1
+fi
+
+printf '%s\n' \
   'yuragi: --explain requires a non-empty --filter query; an empty query performs no matching' \
   >"$test_dir/explain-empty-expected-stderr"
 set +e
@@ -457,36 +473,64 @@ if ! cmp -s "$test_dir/empty-expected" "$test_dir/stdout"; then
   exit 1
 fi
 
-set +e
+printf '北京大学\n' >"$test_dir/zh-expected"
 printf '北京大学\nnotes\n' | .pixi/bin/yuragi --lang zh --filter bjdx \
-  >"$test_dir/stdout" 2>"$test_dir/stderr"
-exit_code=$?
-set -e
-if [[ $exit_code -ne 2 ]]; then
-  echo "unavailable phonetic matching must exit 2 (got $exit_code)" >&2
+  >"$test_dir/zh-actual" 2>"$test_dir/zh-stderr"
+if ! cmp -s "$test_dir/zh-expected" "$test_dir/zh-actual" || \
+  [[ -s "$test_dir/zh-stderr" ]]; then
+  echo "explicit Chinese initials did not select the original candidate" >&2
   exit 1
 fi
-if [[ -s "$test_dir/stdout" ]]; then
-  echo "blocked phonetic filtering wrote candidate output" >&2
+
+printf 'カメラ\n' >"$test_dir/ja-expected"
+printf 'カメラ\n日本語\n' | .pixi/bin/yuragi --lang ja --filter kamera \
+  >"$test_dir/ja-actual" 2>"$test_dir/ja-stderr"
+if ! cmp -s "$test_dir/ja-expected" "$test_dir/ja-actual" || \
+  [[ -s "$test_dir/ja-stderr" ]]; then
+  echo "explicit Japanese romaji did not select Katakana source text" >&2
   exit 1
 fi
-if ! grep -Fxq \
-  'yuragi: --lang zh phonetic matching awaits the Yomi integration; direct matching works without --lang' \
-  "$test_dir/stderr"; then
-  echo "blocked phonetic filtering did not explain the Yomi gate" >&2
+
+printf '한글\n한글\n' >"$test_dir/ko-expected"
+printf '한글\n한글\nnotes\n' | \
+  .pixi/bin/yuragi --lang ko --filter 'han geul' \
+  >"$test_dir/ko-actual" 2>"$test_dir/ko-stderr"
+if ! cmp -s "$test_dir/ko-expected" "$test_dir/ko-actual" || \
+  [[ -s "$test_dir/ko-stderr" ]]; then
+  echo "Korean NFC/NFD candidates did not preserve source identity" >&2
+  exit 1
+fi
+
+printf '1\t3315\tzh-pinyin-joined\t0,1\t北京大学\n' \
+  >"$test_dir/zh-explain-expected"
+printf '北京大学\nnotes\n' | \
+  .pixi/bin/yuragi --lang zh --filter beijing --explain \
+  >"$test_dir/zh-explain-actual" 2>"$test_dir/zh-explain-stderr"
+if ! cmp -s "$test_dir/zh-explain-expected" \
+  "$test_dir/zh-explain-actual" || [[ -s "$test_dir/zh-explain-stderr" ]]; then
+  echo "Chinese explanation lost winning key kind or source positions" >&2
   exit 1
 fi
 
 set +e
-.pixi/bin/yuragi --lang zh --filter '' </dev/null \
-  >"$test_dir/stdout" 2>"$test_dir/stderr"
+printf '北京大学\n' | .pixi/bin/yuragi --filter bjdx \
+  >"$test_dir/auto-cjk-stdout" 2>"$test_dir/auto-cjk-stderr"
 exit_code=$?
 set -e
-if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
-  ! grep -Fxq \
-    'yuragi: --lang zh phonetic matching awaits the Yomi integration; direct matching works without --lang' \
-    "$test_dir/stderr"; then
-  echo "empty-query phonetic filtering must explain the Yomi gate" >&2
+if [[ $exit_code -ne 1 ]] || [[ -s "$test_dir/auto-cjk-stdout" ]] || \
+  [[ -s "$test_dir/auto-cjk-stderr" ]]; then
+  echo "auto mode must remain direct-only" >&2
+  exit 1
+fi
+
+set +e
+printf '日本語\n' | .pixi/bin/yuragi --lang ja --filter nihongo \
+  >"$test_dir/ja-kanji-stdout" 2>"$test_dir/ja-kanji-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 1 ]] || [[ -s "$test_dir/ja-kanji-stdout" ]] || \
+  [[ -s "$test_dir/ja-kanji-stderr" ]]; then
+  echo "Japanese Kanji must not claim unavailable dictionary readings" >&2
   exit 1
 fi
 
@@ -520,15 +564,13 @@ if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
 fi
 
 set +e
-.pixi/bin/yuragi --lang zh </dev/null \
-  >"$test_dir/stdout" 2>"$test_dir/stderr"
+.pixi/bin/yuragi --lang zh --exit-0 </dev/null \
+  >"$test_dir/lang-exit0-stdout" 2>"$test_dir/lang-exit0-stderr"
 exit_code=$?
 set -e
-if [[ $exit_code -ne 2 ]] || [[ -s "$test_dir/stdout" ]] || \
-  ! grep -Fxq \
-    'yuragi: --lang zh phonetic matching awaits the Yomi integration; direct matching works without --lang' \
-    "$test_dir/stderr"; then
-  echo "interactive phonetic mode must explain the Yomi gate" >&2
+if [[ $exit_code -ne 1 ]] || [[ -s "$test_dir/lang-exit0-stdout" ]] || \
+  [[ -s "$test_dir/lang-exit0-stderr" ]]; then
+  echo "interactive language mode must participate in initial automation" >&2
   exit 1
 fi
 

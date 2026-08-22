@@ -159,8 +159,9 @@ def test_help_and_version_text() raises:
     assert_true("TAB marks and moves down; Shift-TAB marks" in usage())
     assert_true("and moves up in --multi mode" in usage())
     assert_true("Both are inert without --multi" in usage())
-    assert_true("Ctrl-U clears the query; Ctrl-W deletes the trailing word" in usage())
-    assert_equal(version_text(), "yuragi 0.0.0")
+    assert_true("Left/Right/Home/End move the query cursor" in usage())
+    assert_true("Ctrl-U clears; Ctrl-W deletes the previous word" in usage())
+    assert_equal(version_text(), "yuragi 0.1.0")
 
 
 def test_nul_framing_options() raises:

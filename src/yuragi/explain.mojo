@@ -3,9 +3,7 @@
 from std.collections import List
 
 from yuragi.ranking import RankedCandidate
-
-
-comptime KEY_KIND_ORIGINAL = "original"
+from yuragi.phonetic import key_kind_name
 
 
 def render_explanation(ranked: List[RankedCandidate]) -> String:
@@ -20,7 +18,7 @@ def render_explanation(ranked: List[RankedCandidate]) -> String:
             "\t",
             ranked[index].score,
             "\t",
-            KEY_KIND_ORIGINAL,
+            key_kind_name(ranked[index].key_kind),
             "\t",
         )
         for position_index in range(len(ranked[index].positions)):

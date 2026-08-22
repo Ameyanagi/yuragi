@@ -232,7 +232,10 @@ def wait_for_initial_picker(
     *,
     multi: bool = False,
 ) -> None:
-    counter = "3/3 (0)" if multi else "3/3"
+    counter = (
+        "lang=auto matches=3/3 retained=3 shown=3 marks="
+        + ("0" if multi else "0")
+    )
 
     def picker_is_ready(current: TerminalScreen) -> bool:
         return (
@@ -248,7 +251,7 @@ def wait_for_initial_picker(
         process,
         output,
         screen,
-        f"initial {counter} picker with all candidates",
+        "initial picker status with all candidates",
         picker_is_ready,
     )
     attributes = termios.tcgetattr(slave)
@@ -288,7 +291,7 @@ def drive_picker_accepts(
         screen,
         "query 'b' with counter 1/3",
         lambda current: current.line(0).startswith("> b")
-        and current.line(1).startswith("1/3"),
+        and current.line(1).startswith("lang=auto matches=1/3"),
     )
     os.write(master, b"r")
     read_until(
@@ -355,7 +358,7 @@ def drive_control_u_clears_query(
         screen,
         "empty query with counter 3/3 after Ctrl-U",
         lambda current: current.line(0) == ">"
-        and current.line(1).startswith("3/3"),
+        and current.line(1).startswith("lang=auto matches=3/3"),
     )
     os.write(master, b"\x1b")
 
@@ -388,7 +391,7 @@ def drive_control_w_deletes_word(
         screen,
         "empty query with counter 3/3 after Ctrl-W",
         lambda current: current.line(0) == ">"
-        and current.line(1).startswith("3/3"),
+        and current.line(1).startswith("lang=auto matches=3/3"),
     )
     os.write(master, b"\x1b")
 
@@ -492,6 +495,78 @@ def drive_multi_reverse_order(
     os.write(master, b"\r")
 
 
+def drive_paste_transaction(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    wait_for_initial_picker(name, master, slave, process, output, screen)
+    os.write(master, b"\x1b[200~br\n\x1b[201~")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "one sanitized paste with one retained match",
+        lambda current: current.line(0).startswith("> br")
+        and current.line(1).startswith("lang=auto matches=1/3 retained=1"),
+    )
+    os.write(master, b"\r")
+
+
+def drive_no_match_enter_stays_open(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "no-match guidance",
+        lambda current: current.line(1).startswith("lang=auto matches=0/3")
+        and current.contains("No matches"),
+    )
+    os.write(master, b"\r")
+    time.sleep(0.1)
+    if process.poll() is not None:
+        fail(name, "Enter closed a picker with no selected row", output, screen)
+    os.write(master, b"\x1b")
+
+
+def drive_language_match(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    language = name.split()[0]
+    expected_matches = 2 if language == "ko" else 1
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        f"{language} language status and phonetic match",
+        lambda current: current.line(1).startswith(
+            f"lang={language} matches={expected_matches}/"
+        ),
+    )
+    os.write(master, b"\r")
+
+
 def run_case(
     binary: Path,
     name: str,
@@ -501,6 +576,7 @@ def run_case(
     *,
     driver: Driver | None = None,
     check_restoration: bool = False,
+    candidates: bytes = CANDIDATES,
 ) -> None:
     master, slave = pty.openpty()
     process: subprocess.Popen[bytes] | None = None
@@ -529,7 +605,7 @@ def run_case(
         )
         if process.stdin is None:
             fail(name, "stdin pipe was not created", output, screen)
-        process.stdin.write(CANDIDATES)
+        process.stdin.write(candidates)
         process.stdin.close()
         process.stdin = None
 
@@ -644,10 +720,53 @@ def main() -> int:
         0,
         driver=drive_multi_reverse_order,
     )
+    run_case(
+        binary,
+        "paste reranks once",
+        [],
+        b"bravo\n",
+        0,
+        driver=drive_paste_transaction,
+    )
+    run_case(
+        binary,
+        "no-match Enter stays open",
+        ["--query", "zzz"],
+        b"",
+        130,
+        driver=drive_no_match_enter_stays_open,
+    )
+    run_case(
+        binary,
+        "zh PTY phonetic",
+        ["--lang", "zh", "--query", "bjdx"],
+        "北京大学\n".encode(),
+        0,
+        driver=drive_language_match,
+        candidates="北京大学\nnotes\n".encode(),
+    )
+    run_case(
+        binary,
+        "ja PTY phonetic",
+        ["--lang", "ja", "--query", "kamera"],
+        "カメラ\n".encode(),
+        0,
+        driver=drive_language_match,
+        candidates="カメラ\n日本語\n".encode(),
+    )
+    run_case(
+        binary,
+        "ko PTY phonetic",
+        ["--lang", "ko", "--query", "hangeul"],
+        "한글\n".encode(),
+        0,
+        driver=drive_language_match,
+        candidates="한글\n한글\nnotes\n".encode(),
+    )
     print(
         "Interactive PTY tests passed "
-        "(accept, ESC, Ctrl-C, Ctrl-U, Ctrl-W, select-1, exit-0, multi, "
-        "source order)."
+        "(accept, abort, editor controls, paste, no-match guidance, multi, "
+        "source order, and explicit zh/ja/ko search)."
     )
     return 0
 

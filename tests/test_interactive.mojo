@@ -1,4 +1,4 @@
-from mojotui import KeyEvent
+from mojotui import InputEvent, KeyEvent, PasteEvent
 from std.collections import List
 from std.testing import TestSuite, assert_equal, assert_false, assert_true
 
@@ -6,6 +6,7 @@ from yuragi.candidate import Candidate, candidates_from_text
 from yuragi.interactive import (
     FinderOutcome,
     FinderSession,
+    _FinderApplication,
     _FinderModel,
     _counter_text,
     _handle_key,
@@ -13,6 +14,7 @@ from yuragi.interactive import (
     _item_line,
     _match_count,
     _marked_count,
+    _query_text,
     _row_count,
     _selected_id,
     _total_count,
@@ -58,7 +60,7 @@ def test_typing_narrows_matches_and_counter() raises:
     assert_equal(_total_count(model), 3)
 
     assert_false(_handle_key(model, KeyEvent.character(String("b"))))
-    assert_equal(model.query, "b")
+    assert_equal(_query_text(model), "b")
     assert_equal(_match_count(model), 1)
     assert_equal(_total_count(model), 3)
     assert_equal(model.matches[0].text, "banana")
@@ -75,7 +77,7 @@ def test_control_u_clears_query_and_restores_all_matches() raises:
             KeyEvent.character(String("u"), KeyEvent.CONTROL),
         )
     )
-    assert_equal(model.query, "")
+    assert_equal(_query_text(model), "")
     assert_equal(_match_count(model), 3)
 
 
@@ -88,7 +90,7 @@ def test_control_w_deletes_the_trailing_word() raises:
             KeyEvent.character(String("w"), KeyEvent.CONTROL),
         )
     )
-    assert_equal(model.query, "alpha ")
+    assert_equal(_query_text(model), "alpha ")
 
     var solo_candidates = candidates_from_text("alpha bravo\nalpha charlie\nsolo\n")
     var solo_model = _seeded_model(solo_candidates^, String("solo"))
@@ -98,8 +100,54 @@ def test_control_w_deletes_the_trailing_word() raises:
             KeyEvent.character(String("w"), KeyEvent.CONTROL),
         )
     )
-    assert_equal(solo_model.query, "")
+    assert_equal(_query_text(solo_model), "")
     assert_equal(_match_count(solo_model), 3)
+
+
+def test_editor_cursor_delete_home_end_and_history_commands() raises:
+    var candidates = candidates_from_text("abc\nother\n")
+    var model = _seeded_model(candidates^, String("ac"))
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.LEFT)))
+    assert_false(_handle_key(model, KeyEvent.character(String("b"))))
+    assert_equal(_query_text(model), "abc")
+    assert_equal(_match_count(model), 1)
+
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.HOME)))
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.DELETE)))
+    assert_equal(_query_text(model), "bc")
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.END)))
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.BACKSPACE)))
+    assert_equal(_query_text(model), "b")
+
+    assert_false(_handle_key(model, KeyEvent.character(String("z"), KeyEvent.CONTROL)))
+    assert_equal(_query_text(model), "bc")
+    assert_false(_handle_key(model, KeyEvent.character(String("y"), KeyEvent.CONTROL)))
+    assert_equal(_query_text(model), "b")
+
+
+def test_shift_text_is_accepted_but_alt_characters_do_not_leak() raises:
+    var candidates = candidates_from_text("alpha\n")
+    var model = _model(candidates^)
+    assert_false(_handle_key(model, KeyEvent.character(String("A"), KeyEvent.SHIFT)))
+    assert_equal(_query_text(model), "A")
+    assert_false(_handle_key(model, KeyEvent.character(String("x"), KeyEvent.ALT)))
+    assert_equal(_query_text(model), "A")
+
+
+def test_paste_is_one_editor_transaction_and_one_rerank() raises:
+    var candidates = candidates_from_text("alpha\nbravo\ncharlie\n")
+    var model = _model(candidates^)
+    var application = _FinderApplication(model^)
+    var initialized = application.init()
+    var live_model = initialized.take_model()
+    var before = live_model.input.engine.document.version
+    var message = application.on_input(live_model, InputEvent(PasteEvent("br\n")))
+    assert_true(message)
+    _ = application.update(live_model, message.take())
+    assert_equal(live_model.input.engine.document.version, before + 1)
+    assert_equal(_query_text(live_model), "br")
+    assert_equal(_match_count(live_model), 1)
+    assert_equal(live_model.matches[0].text, "bravo")
 
 
 def test_selection_survives_refinement_by_candidate_id() raises:
@@ -126,6 +174,14 @@ def test_enter_accepts_exact_cursor_candidate() raises:
     assert_equal(len(selected), 1)
     assert_equal(selected[0].source_index, 1)
     assert_equal(selected[0].text, "second")
+
+
+def test_enter_with_no_result_keeps_picker_open() raises:
+    var candidates = candidates_from_text("first\nsecond\n")
+    var model = _seeded_model(candidates^, String("missing"))
+    assert_equal(_row_count(model), 0)
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.ENTER)))
+    assert_true(model.outcome == FinderOutcome.ABORTED)
 
 
 def test_multi_tab_marks_and_moves_down() raises:
@@ -171,7 +227,10 @@ def test_multi_render_shows_marker_and_marked_count() raises:
     var unmarked_line = _item_line(model, 1)
     assert_equal(marked_line.spans[0].content, "* ")
     assert_equal(unmarked_line.spans[0].content, "  ")
-    assert_equal(_counter_text(model), "2/2 (1)")
+    assert_equal(
+        _counter_text(model),
+        "lang=auto matches=2/2 retained=2 shown=2 marks=1",
+    )
 
 
 def test_multi_marks_survive_query_refinement() raises:
@@ -183,7 +242,10 @@ def test_multi_marks_survive_query_refinement() raises:
     assert_equal(_match_count(model), 1)
     assert_equal(model.matches[0].text, "banana")
     assert_true(_is_marked(model, 0))
-    assert_equal(_counter_text(model), "1/2 (1)")
+    assert_equal(
+        _counter_text(model),
+        "lang=auto matches=1/2 retained=1 shown=1 marks=1",
+    )
 
     assert_false(_handle_key(model, KeyEvent.named(KeyEvent.BACKSPACE)))
     assert_equal(_match_count(model), 2)
@@ -257,7 +319,10 @@ def test_tab_without_multi_is_inert() raises:
     assert_true(model.cursor.selected.value() == UInt(0))
     var first_line = _item_line(model, 0)
     assert_equal(first_line.spans[0].content, "first")
-    assert_equal(_counter_text(model), "2/2")
+    assert_equal(
+        _counter_text(model),
+        "lang=auto matches=2/2 retained=2 shown=2 marks=0",
+    )
 
 
 def test_escape_aborts_with_empty_selection() raises:
@@ -272,7 +337,7 @@ def test_empty_query_preserves_all_candidates_in_source_order() raises:
     var candidates = candidates_from_text("third\nfirst\nsecond\n")
     var model = _model(candidates^)
 
-    assert_equal(model.query, "")
+    assert_equal(_query_text(model), "")
     assert_equal(_match_count(model), 3)
     assert_equal(len(model.matches), 0)
     assert_equal(_row_count(model), 3)
@@ -288,7 +353,7 @@ def test_seeded_query_initializes_ranked_state_on_first_match() raises:
     var session = FinderSession(candidates^, options)
     ref model = session._model
 
-    assert_equal(model.query, "ba")
+    assert_equal(_query_text(model), "ba")
     assert_equal(_match_count(model), 2)
     assert_equal(model.matches[0].text, "bar")
     assert_equal(model.matches[1].text, "banana")
@@ -296,9 +361,19 @@ def test_seeded_query_initializes_ranked_state_on_first_match() raises:
     assert_true(_selected_id(model).value() == model.matches[0].source_index)
 
     assert_false(_handle_key(model, KeyEvent.character(String("n"))))
-    assert_equal(model.query, "ban")
+    assert_equal(_query_text(model), "ban")
     assert_true(model.index.last_search_was_incremental())
     assert_equal(model.index.last_scanned_count(), 2)
+
+
+def test_session_constructor_prepares_the_explicit_language_once() raises:
+    var args: List[String] = ["yuragi", "--lang", "zh", "--query", "bjdx"]
+    var candidates = candidates_from_text("北京大学\nnotes\n")
+    var session = FinderSession(candidates^, parse_options(args^))
+    assert_equal(_query_text(session._model), "bjdx")
+    assert_equal(_match_count(session._model), 1)
+    assert_equal(session._model.matches[0].text, "北京大学")
+    assert_true(_counter_text(session._model).startswith("lang=zh matches=1/2"))
 
 
 def test_seeded_limited_query_preserves_exact_total_match_count() raises:
@@ -309,7 +384,10 @@ def test_seeded_limited_query_preserves_exact_total_match_count() raises:
 
     assert_equal(len(session._model.matches), 1)
     assert_equal(_match_count(session._model), 3)
-    assert_equal(_counter_text(session._model), "3/3")
+    assert_equal(
+        _counter_text(session._model),
+        "lang=auto matches=3/3 retained=1 shown=1 marks=0",
+    )
 
 
 def test_empty_query_limit_bounds_interactive_rows_not_exact_count() raises:
