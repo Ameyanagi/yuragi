@@ -161,4 +161,9 @@ if [[ ! "$changelog_dates" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
     exit 1
 fi
 
-echo "release contract verified: $tag_name, exact stable Mojo and ecosystem dependencies, changelog $changelog_dates"
+if ! grep -Fq 'GH_REPO: ${{ github.repository }}' .github/workflows/release.yml; then
+    echo "release publisher must set GH_REPO before running outside a Git checkout" >&2
+    exit 1
+fi
+
+echo "release contract verified: $tag_name, exact stable Mojo and ecosystem dependencies, changelog $changelog_dates, and publisher repository context"
