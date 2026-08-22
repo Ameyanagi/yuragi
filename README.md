@@ -198,14 +198,16 @@ with `--filter`.
 | TAB | With `--multi`, toggle the cursor mark and move down |
 | Shift-TAB | With `--multi`, toggle the cursor mark and move up |
 | Left/Right, Ctrl-B/Ctrl-F | Move the query cursor by grapheme |
+| Shift-Left/Shift-Right | Extend the query selection by grapheme |
 | Home/End, Ctrl-A/Ctrl-E | Move to the start/end of the query |
 | Backspace, Ctrl-H | Delete the previous grapheme or selection |
 | Delete, Ctrl-D | Delete the next grapheme or selection |
 | Ctrl-K | Delete from the cursor to the end of the query |
 | Ctrl-U | Clear the query |
 | Ctrl-W | Delete the previous Unicode word |
+| Ctrl-X/Ctrl-V | Cut/paste through the query editor clipboard |
 | Ctrl-Z/Ctrl-Y | Undo/redo a query edit |
-| Bracketed paste | Insert the complete paste as one undoable transaction |
+| Bracketed paste | Insert normalized one-line text as one undoable transaction |
 
 Marks follow candidate source identities, so they survive query refinement
 even while a marked candidate is absent from the current matches. TAB and
