@@ -32,11 +32,11 @@ candidate model ---- selection orchestration
 ```
 
 The implemented foundation includes options, whole-stream UTF-8 ingestion,
-candidate framing, output framing, direct-text Hibana ranking, exact pre-limit
-match counts, bounded top-K rows, and an inline MojoTUI picker. An empty query is
-identity selection. The picker and filter share the same ranking path; retained
-rows never stand in for the total match count, and cursor identity follows the
-source candidate across query changes.
+candidate framing, output framing, prepared direct and explicit-language key
+sets, exact pre-limit match counts, bounded top-K rows, and an inline MojoTUI
+picker. An empty query is identity selection. The picker and filter share the
+same `SearchIndex`; retained rows never stand in for the total match count, and
+cursor identity follows the source candidate across query changes.
 
 The empty interactive query is represented as a lazy identity view. Its exact
 cardinality and cursor IDs come directly from the owned `SearchIndex`; only the
@@ -64,20 +64,11 @@ phonetic expansion cannot prove the same variant-level monotonicity. Returned
 rows use Hibana's exact score and scalar positions, total counts are computed
 before truncation, and ties retain source order.
 
-The installed Hibana package currently exposes only the allocation-bearing
-matcher, so this first index improves repeated/refined scans but is not yet a
-prepared corpus. Hibana source now has three opt-in building blocks for the
-next package release:
-
-- exact allocation-free score-only matching plus caller-owned final positions;
-- `HYBRID` ranking, which has exact membership, counts, finalist scores, and
-  positions but approximate top-B candidate selection;
-- synchronous parallel `EXACT` ranking with deterministic shard merging.
-
-`EXACT` and `HYBRID` remain explicit policies. A fixed hybrid shortlist must
-never be described as exact top-k equivalence. The product path will consume
-these APIs only from immutable multi-platform packages; it does not import
-sibling source trees or replace a hosted artifact in place.
+The index prepares candidate representations once, uses Hibana's score-only
+path while scanning, and reconstructs positions only for final retained rows.
+Each visible candidate contributes only its best compatible key. This keeps
+the public application surface small while avoiding per-query phonetic
+generation and match-position allocation across the whole corpus.
 
 The fuzzy scan itself has loop-carried pattern state and divergent Unicode
 early exits. A measured folded SIMD cache regressed dense matching, so Hibana
@@ -85,11 +76,13 @@ keeps that kernel scalar. Parallelism is coarse across independent candidates;
 SIMD is used in vector-friendly ecosystem kernels rather than added to a
 dependency-bound fuzzy loop without evidence.
 
-Yomi phonetic key integration remains a package-release gate. Yuragi will index
-one visible candidate into bounded typed search keys, merge the best compatible
-key match, and project only visible/accepted generated-key positions back to
-the original text. Language algorithms and mapping tables remain outside
-Yuragi.
+Yomi generates bounded typed Japanese, Chinese, and Korean candidate/query
+keys. Yuragi merges the best compatible key match and projects generated-key
+positions through Yomi's source mappings and Moji's scalar coordinates to the
+original text. Language algorithms and mapping tables remain outside Yuragi.
+`--lang auto` generates only direct keys; explicit language selection is needed
+for phonetic expansion, so mixed-script behavior never depends on a heuristic
+detector.
 
 Shell integration is a deterministic generation boundary: `yuragi shell`
 prints a script and never reads candidate input, probes the host, or edits a

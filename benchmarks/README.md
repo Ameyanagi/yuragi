@@ -12,6 +12,13 @@ extensions. See [fair-search-protocol.md](fair-search-protocol.md) for the exact
 specification, current same-machine results, threading caveats, and why a
 portable memory ratio is not yet reported.
 
+Prepared language-mode release measurements follow
+[`cjk-search-v1`](cjk-search-protocol.md): deterministic 10k/100k corpora,
+three warmups, 31 measured samples, p50/p95, exact semantic checksums, and
+separate preparation/search counters. Record profiles outside the timed
+samples. The protocol also explains why SIMD is not currently justified for
+the branch-heavy fuzzy loop.
+
 Profile large empty-query picker construction separately with:
 
 ```sh
@@ -53,17 +60,16 @@ pixi run bench-search
 
 `bench_search.mojo` measures Yuragi's complete bounded interactive ranking path
 after candidate ingestion: matcher construction, scoring, pre-limit match
-counting, top-K retention, and retained-row materialization. It reports the
-minimum of five samples after warmup for 100, 10,000, and 100,000 generated path
-candidates. Each cell scans the same approximate total number of candidates so
-timer resolution does not dominate small cases. The checksum and exact total
-match count prevent dead-code elimination and semantic benchmark drift.
+counting, top-K retention, and retained-row materialization. It is a diagnostic
+microbenchmark, not release evidence unless it performs the three warmups and
+31-sample p50/p95 procedure above. The checksum and exact total match count
+prevent dead-code elimination and semantic benchmark drift.
 
 This is orchestration evidence, not a cross-machine marketing claim. Record the
 CPU, OS, `Mojo 1.0.0`, and commit when comparing results. Run release-mode
 compiled executable benchmarks separately for full stdin/process costs.
 
-The remaining parity matrix will continue to separate UTF-8 ingestion, Yomi
-representation generation by language, Hibana prepared-candidate scoring, and
-complete process time. Add licensed/provenanced CJK corpora before publishing
-language-mode numbers.
+The language parity matrix separates UTF-8 ingestion, Yomi representation
+generation by language, Hibana prepared-candidate scoring, source projection,
+and complete process time. Publish language-mode numbers only for deterministic
+synthetic data or licensed/provenanced corpora.

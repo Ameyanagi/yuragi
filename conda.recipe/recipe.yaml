@@ -1,5 +1,5 @@
 context:
-  version: "0.0.0"
+  version: "0.1.0"
 
 package:
   name: yuragi
@@ -12,33 +12,43 @@ build:
   number: 0
   script:
     - mkdir -p ${{ PREFIX }}/bin
-    - mojo build --Werror -I src src/yuragi/main.mojo -o ${{ PREFIX }}/bin/yuragi
+    - mojo build --Werror -I ${{ PREFIX }}/lib/mojo -I src src/yuragi/main.mojo -o ${{ PREFIX }}/bin/yuragi
 
 requirements:
   build:
-    - mojo-compiler =1.0.0
-    - mojo-hibana
-    - mojo-mojotui
+    - mojo-compiler ==1.0.0
+    - mojo-hibana ==0.1.0
+    - mojo-moji ==0.1.0
+    - mojo-mojotui ==0.1.1
+    - mojo-yomi ==0.1.1
   host:
-    - mojo-compiler =1.0.0
-    - mojo-hibana
-    - mojo-mojotui
+    - mojo-compiler ==1.0.0
+    - mojo-hibana ==0.1.0
+    - mojo-moji ==0.1.0
+    - mojo-mojotui ==0.1.1
+    - mojo-yomi ==0.1.1
   run:
-    - ${{ pin_compatible('mojo-compiler') }}
+    - mojo-compiler ==1.0.0
+    - mojo-hibana ==0.1.0
+    - mojo-moji ==0.1.0
+    - mojo-mojotui ==0.1.1
+    - mojo-yomi ==0.1.1
 
 tests:
   - script:
-      - printf 'yuragi 0.0.0\n' > expected-version.txt
-      - yuragi --version > actual-version.txt
-      - cmp expected-version.txt actual-version.txt
-      - printf '北京大学\r\n\r\nnotes\r' > candidates.txt
-      - printf '北京大学\n\nnotes\r\n' > expected.txt
-      - yuragi --filter '' < candidates.txt > actual.txt
-      - cmp expected.txt actual.txt
-      - printf 'apple\nbanana\n' > ranked-input.txt
-      - printf 'banana\n' > ranked-expected.txt
-      - yuragi --filter ba < ranked-input.txt > ranked-actual.txt
-      - cmp ranked-expected.txt ranked-actual.txt
+      - test "$(yuragi --version)" = "yuragi 0.1.0"
+      - printf 'apple\nbanana\n' | yuragi --filter ba > direct.txt
+      - printf 'banana\n' > direct.expected
+      - cmp direct.expected direct.txt
+      - printf '北京大学\n上海\n' | yuragi --lang zh --filter bjdx > zh.txt
+      - printf '北京大学\n' > zh.expected
+      - cmp zh.expected zh.txt
+      - printf 'カメラ\n東京\n' | yuragi --lang ja --filter kamera > ja.txt
+      - printf 'カメラ\n' > ja.expected
+      - cmp ja.expected ja.txt
+      - printf '한글\n서울\n' | yuragi --lang ko --filter hangeul > ko.txt
+      - printf '한글\n' > ko.expected
+      - cmp ko.expected ko.txt
 
 about:
   homepage: https://github.com/Ameyanagi/yuragi

@@ -9,9 +9,52 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    name: Check ${{ matrix.name }}
+  release-contract:
+    name: Verify release contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify annotated tag, versions, dependencies, and changelog
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          bash scripts/check-release.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+
+  archive:
+    name: Build canonical source archive
+    needs: release-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Create source archive and checksum
+        run: |
+          set -euo pipefail
+          archive="yuragi-${GITHUB_REF_NAME}.tar.gz"
+          git archive --format=tar.gz \
+            --prefix="yuragi-${GITHUB_REF_NAME}/" \
+            --output="$archive" \
+            "$GITHUB_SHA"
+          sha256sum "$archive" >"${archive}.sha256"
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: source-archive
+          path: |
+            yuragi-${{ github.ref_name }}.tar.gz
+            yuragi-${{ github.ref_name }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  source-check:
+    name: Check source archive on ${{ matrix.name }}
+    needs: archive
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -23,32 +66,102 @@ jobs:
           - name: macOS ARM64
             os: macos-14
     steps:
-      - uses: actions/checkout@v7
-      - uses: prefix-dev/setup-pixi@v0.10.1
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: source-archive
+          path: ${{ runner.temp }}/archive
+      - name: Verify and extract canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/archive"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum --check "yuragi-${GITHUB_REF_NAME}.tar.gz.sha256"
+          else
+            shasum -a 256 --check "yuragi-${GITHUB_REF_NAME}.tar.gz.sha256"
+          fi
+          mkdir -p "${RUNNER_TEMP}/source"
+          tar -xzf "yuragi-${GITHUB_REF_NAME}.tar.gz" \
+            --strip-components=1 -C "${RUNNER_TEMP}/source"
+      - uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
         with:
           pixi-version: v0.76.2
           cache: true
-      - run: pixi run --locked check
+          working-directory: ${{ runner.temp }}/source
+      - name: Verify canonical source
+        working-directory: ${{ runner.temp }}/source
+        run: pixi run --locked check
+
+  package:
+    name: Package source archive on ${{ matrix.name }}
+    needs: archive
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86-64
+            os: ubuntu-24.04
+            subdir: linux-64
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+            subdir: linux-aarch64
+          - name: macOS ARM64
+            os: macos-14
+            subdir: osx-arm64
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: source-archive
+          path: ${{ runner.temp }}/archive
+      - name: Verify and extract canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/archive"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum --check "yuragi-${GITHUB_REF_NAME}.tar.gz.sha256"
+          else
+            shasum -a 256 --check "yuragi-${GITHUB_REF_NAME}.tar.gz.sha256"
+          fi
+          mkdir -p "${RUNNER_TEMP}/source"
+          tar -xzf "yuragi-${GITHUB_REF_NAME}.tar.gz" \
+            --strip-components=1 -C "${RUNNER_TEMP}/source"
+      - uses: prefix-dev/setup-pixi@f00437f565399d418b0acc85936d12c1fb668347 # v0.10.1
+        with:
+          pixi-version: v0.76.2
+          cache: true
+          working-directory: ${{ runner.temp }}/source
+      - name: Build and test installed package
+        working-directory: ${{ runner.temp }}/source
+        run: pixi run --locked package
+      - name: Validate emitted package index
+        working-directory: ${{ runner.temp }}/source
+        run: |
+          pixi_version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' pixi.toml)
+          bash scripts/check-package.sh yuragi "$pixi_version" "${{ matrix.subdir }}"
 
   publish:
     name: Publish source release
-    needs: check
+    needs: [archive, source-check, package]
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: release
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
-      - name: Build source archive
-        run: >-
-          git archive --format=tar.gz
-          --prefix="yuragi-${GITHUB_REF_NAME}/"
-          --output="yuragi-${GITHUB_REF_NAME}.tar.gz"
-          "${GITHUB_SHA}"
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: source-archive
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "${GITHUB_REF_NAME}"
-          "yuragi-${GITHUB_REF_NAME}.tar.gz"
-          --verify-tag --generate-notes
-          --title "Yuragi ${GITHUB_REF_NAME}"
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            "yuragi-${GITHUB_REF_NAME}.tar.gz" \
+            "yuragi-${GITHUB_REF_NAME}.tar.gz.sha256" \
+            --verify-tag --generate-notes \
+            --title "Yuragi ${GITHUB_REF_NAME}"

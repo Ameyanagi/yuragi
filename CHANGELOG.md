@@ -5,8 +5,23 @@ and uses semantic versioning after the first public release.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-22
+
+This is Yuragi's first source-tagged and three-platform packaged release.
+
 ### Added
 
+- One prepared `SearchIndex` shared by filter and interactive workflows, with
+  bounded top-K output and final-only match-position reconstruction.
+- Explicit Japanese, Chinese, and Korean phonetic search backed by Yomi's
+  typed, source-mapped keys, while `--lang auto` remains predictable
+  direct-text matching.
+- Original-text highlights for generated-key matches, including discontiguous
+  source ranges.
+- Exact stable Mojo 1.0.0 and ecosystem dependency pins plus installed-package
+  direct, language, and version smoke tests.
+- SHA-pinned three-platform source/package CI and a gated, checksummed source
+  release workflow.
 - Validated `--filter`, `--lang`, `--help`, and `--version` option parsing.
 - Safe, chunked UTF-8 candidate ingestion from standard input.
 - Deterministic newline-delimited output and empty-query identity selection.

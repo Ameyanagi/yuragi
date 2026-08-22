@@ -42,15 +42,20 @@ RAYON_NUM_THREADS=1 cargo bench --bench search \
 ```
 
 Yuru uses Criterion with 30 samples and reports robust intervals. Yuragi uses
-31 independent samples after warmup and prints nearest-rank p50/p95, never only
-the fastest observation. Record hardware, OS, compiler versions, thread
-settings, and commits with any published result.
+three unreported warmups followed by 31 independent measured samples and prints
+nearest-rank p50/p95, never only the fastest observation. Record hardware, OS,
+compiler versions, thread settings, and commits with any published result.
 
 ## Reference run
 
 Measured 2026-08-22 on an Apple M4 (10 physical cores), macOS 26.5.1, Rust
 1.95.0, and Mojo 1.0.0. Values are milliseconds. Yuru shows its Criterion
 central estimate; Yuragi shows p50/p95.
+
+This is a historical pre-prepared-index result. Its exact source commit was not
+recorded, so it must not be presented as `0.1.0` release or CJK evidence. A new
+release comparison must record both exact commits and follow the current
+3-warmup/31-sample protocol.
 
 | Search | Size | Yuru default | Yuragi full | Yuragi indexed |
 | --- | ---: | ---: | ---: | ---: |

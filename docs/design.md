@@ -21,9 +21,9 @@ contracts and sparse dependencies. Generated tables are acceptable when their
 sources, Unicode or data version, licenses, checksums, and deterministic update
 procedure are committed. Consumers must not need the generator toolchain.
 
-The direct-text slice verifies process, framing, I/O, deterministic Hibana
-ranking, exact result cardinality, and interactive identity semantics. Phonetic
-matching is added only through Yomi/Moji representations; Yuragi does not embed
+The application verifies process, framing, I/O, deterministic Hibana ranking,
+exact result cardinality, and interactive identity semantics. Phonetic matching
+is provided only through Yomi/Moji representations; Yuragi does not embed
 temporary language tables or collapse generated matches to one bounding span.
 
 The CLI reads the complete stream before selection in the foundation release.
@@ -31,11 +31,11 @@ This is the simplest deterministic ownership model. A bounded-memory streaming
 or top-K design may replace it only after Hibana's matcher lifetime and ranking
 contracts are known.
 
-Language auto-detection is application policy owned by Yuragi. Yomi supplies
-explicit Chinese, Japanese, and Korean representations; it does not decide how
-mixed-script candidates are classified, ordered, or combined. That keeps
-`--lang auto` predictable at the CLI layer and leaves reusable language
-algorithms free of application defaults.
+Yuragi defines `--lang auto` as direct-only rather than attempting language
+detection. Yomi supplies explicit Chinese, Japanese, and Korean
+representations; it does not decide how mixed-script candidates are classified,
+ordered, or combined. This keeps the default predictable and leaves reusable
+language algorithms free of application heuristics.
 
 Generated shell integration is output-only and byte-stable. It does not edit a
 profile or execute a finder while being generated. Runtime functions expose the
