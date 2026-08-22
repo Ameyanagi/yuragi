@@ -3,6 +3,7 @@
 from hibana import Matcher
 from std.collections import List
 from std.testing import TestSuite, assert_equal, assert_false, assert_true
+from yomi import SearchKeyKind
 
 from yuragi.candidate import Candidate, candidates_from_text
 from yuragi.ranking import RankedCandidate, rank_candidates, rank_candidates_page
@@ -68,12 +69,21 @@ def test_ranked_candidate_is_equatable() raises:
     var different_position = RankedCandidate(
         2, String("alpha"), 345, different_positions^
     )
+    var kind_positions: List[Int] = [0, 2]
+    var different_kind = RankedCandidate(
+        2,
+        String("alpha"),
+        345,
+        kind_positions^,
+        SearchKeyKind.CHINESE_PINYIN_JOINED,
+    )
 
     assert_true(ranked == same)
     assert_false(ranked == different_source)
     assert_false(ranked == different_text)
     assert_false(ranked == different_score)
     assert_false(ranked == different_position)
+    assert_false(ranked == different_kind)
 
 
 def test_positions_are_strictly_increasing_scalar_indices() raises:

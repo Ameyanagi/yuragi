@@ -98,53 +98,32 @@ def test_select_1_uses_total_matches_before_limit() raises:
     assert_equal(decision.total_matches, 2)
 
 
-def test_accepts_interactive_mode_and_rejects_unavailable_phonetics() raises:
+def test_explicit_language_modes_flow_through_the_simple_select_api() raises:
     var interactive: List[String] = ["yuragi"]
     var interactive_options = parse_options(interactive^)
     validate_foundation_mode(interactive_options)
 
-    var phonetic: List[String] = [
-        "yuragi",
-        "--filter",
-        "bjdx",
-        "--lang",
-        "zh",
-    ]
-    var options = parse_options(phonetic^)
-    var candidates = candidates_from_text("北京大学\n")
-    with assert_raises(
-        contains=(
-            "--lang zh phonetic matching awaits the Yomi integration; direct "
-            "matching works without --lang"
-        )
-    ):
-        _ = select(candidates^, options)
+    var zh_args: List[String] = ["yuragi", "--filter", "bjdx", "--lang", "zh"]
+    var zh_candidates = candidates_from_text("北京大学\nnotes\n")
+    var zh = select(zh_candidates^, parse_options(zh_args^))
+    assert_equal(len(zh), 1)
+    assert_equal(zh[0].text, "北京大学")
 
-    var interactive_phonetic: List[String] = ["yuragi", "--lang", "zh"]
-    var interactive_phonetic_options = parse_options(interactive_phonetic^)
-    with assert_raises(
-        contains=(
-            "--lang zh phonetic matching awaits the Yomi integration; direct "
-            "matching works without --lang"
-        )
-    ):
-        validate_foundation_mode(interactive_phonetic_options)
+    var ja_args: List[String] = ["yuragi", "--filter", "kamera", "--lang", "ja"]
+    var ja_candidates = candidates_from_text("カメラ\n日本語\n")
+    var ja = select(ja_candidates^, parse_options(ja_args^))
+    assert_equal(len(ja), 1)
+    assert_equal(ja[0].text, "カメラ")
 
-    var empty_filter_phonetic: List[String] = [
-        "yuragi",
-        "--lang",
-        "zh",
-        "--filter",
-        "",
-    ]
-    var empty_filter_options = parse_options(empty_filter_phonetic^)
-    with assert_raises(
-        contains=(
-            "--lang zh phonetic matching awaits the Yomi integration; direct "
-            "matching works without --lang"
-        )
-    ):
-        validate_foundation_mode(empty_filter_options)
+    var ko_args: List[String] = ["yuragi", "--filter", "hangeul", "--lang", "ko"]
+    var ko_candidates = candidates_from_text("한글\nnotes\n")
+    var ko = select(ko_candidates^, parse_options(ko_args^))
+    assert_equal(len(ko), 1)
+    assert_equal(ko[0].text, "한글")
+
+    var auto_args: List[String] = ["yuragi", "--filter", "bjdx"]
+    var auto_candidates = candidates_from_text("北京大学\n")
+    assert_equal(len(select(auto_candidates^, parse_options(auto_args^))), 0)
 
 
 def test_explain_mode_validation() raises:
@@ -167,6 +146,17 @@ def test_explain_mode_validation() raises:
         contains="--explain writes a line-oriented report and conflicts with --print0"
     ):
         validate_foundation_mode(print0_options)
+
+    var read0_args: List[String] = [
+        "yuragi",
+        "--filter",
+        "ba",
+        "--explain",
+        "--read0",
+    ]
+    var read0_options = parse_options(read0_args^)
+    with assert_raises(contains="--explain cannot be used with --read0"):
+        validate_foundation_mode(read0_options)
 
     var empty_args: List[String] = ["yuragi", "--filter", "", "--explain"]
     var empty_options = parse_options(empty_args^)

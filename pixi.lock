@@ -25,12 +25,14 @@ environments:
     - url: https://conda.anaconda.org/conda-forge/
     packages:
       linux-64:
-      - conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-hibana-0.0.0-hb0f4dca_0.conda
-      - conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-moji-0.0.0-hb0f4dca_0.conda
-      - conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-mojotui-0.1.0-hb0f4dca_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-hibana-0.1.0-hb0f4dca_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-moji-0.1.0-hb0f4dca_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-mojotui-0.1.1-hb0f4dca_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-yomi-0.1.1-hb0f4dca_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/icu-78.3-py310h44b86e0_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/jq-1.8.2-h280c20c_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/keyutils-1.6.3-h7cc23a3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/krb5-1.22.2-hbc21106_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/ld_impl_linux-64-2.46.1-default_hbd61a6d_102.conda
@@ -47,6 +49,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libuuid-2.42.2-h5347b49_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libzlib-1.3.2-h25fd6f3_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.6-hdb14827_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/oniguruma-6.9.10-h280c20c_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.3-h35e630c_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/patchelf-0.19.1-h54a6638_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.14.7-h399a421_100_cp314.conda
@@ -81,12 +84,14 @@ environments:
       - conda: https://conda.modular.com/max/noarch/mblack-26.5.0-release.conda
       - conda: https://conda.modular.com/max/noarch/mojo-python-1.0.0-release.conda
       linux-aarch64:
-      - conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-hibana-0.0.0-he8cfe8b_0.conda
-      - conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-moji-0.0.0-he8cfe8b_0.conda
-      - conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-mojotui-0.1.0-he8cfe8b_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-hibana-0.1.0-he8cfe8b_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-moji-0.1.0-he8cfe8b_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-mojotui-0.1.1-he8cfe8b_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-yomi-0.1.1-he8cfe8b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/_openmp_mutex-4.5-20_gnu.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/bzip2-1.0.8-h4777abc_10.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/icu-78.3-py311h3512406_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/jq-1.8.2-h80f16a2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/keyutils-1.6.3-h5bc82ec_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/krb5-1.22.2-h095d8e5_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/ld_impl_linux-aarch64-2.46.1-default_h1979696_102.conda
@@ -103,6 +108,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libuuid-2.42.2-h1022ec0_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/libzlib-1.3.2-hdc9db2a_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/ncurses-6.6-h2b6f883_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/oniguruma-6.9.10-h80f16a2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/openssl-3.6.3-h546c87b_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/patchelf-0.19.1-h7ac5ae9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/python-3.14.7-h6bfacdd_100_cp314.conda
@@ -137,9 +143,10 @@ environments:
       - conda: https://conda.modular.com/max/noarch/mblack-26.5.0-release.conda
       - conda: https://conda.modular.com/max/noarch/mojo-python-1.0.0-release.conda
       osx-arm64:
-      - conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-hibana-0.0.0-h60d57d3_0.conda
-      - conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-moji-0.0.0-h60d57d3_0.conda
-      - conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-mojotui-0.1.0-h60d57d3_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-hibana-0.1.0-h60d57d3_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-moji-0.1.0-h60d57d3_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-mojotui-0.1.1-h60d57d3_0.conda
+      - conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-yomi-0.1.1-h60d57d3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/click-8.4.2-pyhc90fa1f_0.conda
@@ -161,6 +168,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/bzip2-1.0.8-h4e30115_10.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/icu-78.3-py310h579977c_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/jq-1.8.2-h1a92334_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/krb5-1.22.2-h34f8a20_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libcxx-22.1.8-h55c6f16_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libedit-3.1.20250104-pl5321h26f1114_1.conda
@@ -172,6 +180,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libsqlite-3.53.4-hca69786_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libzlib-1.3.2-h8088a28_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/ncurses-6.6-he64c551_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/oniguruma-6.9.10-h1a92334_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.6.3-hd24854e_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/python-3.14.7-hf4d206d_100_cp314.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyzmq-27.1.0-py312h022ad19_3.conda
@@ -186,81 +195,105 @@ environments:
       - conda: https://conda.modular.com/max/osx-arm64/mojo-1.0.0-release.conda
       - conda: https://conda.modular.com/max/osx-arm64/mojo-compiler-1.0.0-release.conda
 packages:
-- conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-hibana-0.0.0-hb0f4dca_0.conda
-  sha256: e788bc1673b92a1ad79dd45487a6fcfedd385d3bcb2dd3805cec052320fb9de8
-  md5: a3d622433034e59322e74e0ffa6c64af
+- conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-hibana-0.1.0-hb0f4dca_0.conda
+  sha256: 2aa58ea6cd50786b673a050317107b25c3033fcc742646e3016c306c193a933d
+  md5: 1512f58cd72422d53acc86b743406c1c
   depends:
-  - mojo-compiler >=1.0.0,<2.0a0
+  - mojo-compiler ==1.0.0
   license: MIT OR Apache-2.0
-  size: 104333
-  timestamp: 1787303705937
-- conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-moji-0.0.0-hb0f4dca_0.conda
-  sha256: 7ff1401642469b20b09802a443ba264fb80852e306648368ad1818dc94402910
-  md5: a99bf43828d64c35f107960e71547f15
+  size: 207766
+  timestamp: 1787370906552
+- conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-moji-0.1.0-hb0f4dca_0.conda
+  sha256: ffc40e94b226edfe77ebb013f23e4cd446b99f263e8ac2fb16e9830e6265254f
+  md5: 232ca078a9b8dca39260b66220cfae97
   depends:
-  - mojo-compiler >=1.0.0,<2.0a0
+  - mojo-compiler ==1.0.0
   license: MIT OR Apache-2.0
-  size: 219370
-  timestamp: 1787303699341
-- conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-mojotui-0.1.0-hb0f4dca_0.conda
-  sha256: ba6141478ab9e32a9d706519992116272e9a76a8c9e852cf6c5d6fcf0d096d11
-  md5: 8396990f8760faa6252c736d555e3ee9
+  size: 269133
+  timestamp: 1787370936664
+- conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-mojotui-0.1.1-hb0f4dca_0.conda
+  sha256: 26f8df88e0686e355522f63b81e7c6a18e7304d838f4898fdbb13e753664494b
+  md5: 4ec2f3dc7c3c81248b24037985765658
   depends:
-  - mojo-compiler >=1.0.0,<2.0a0
-  - mojo-moji
+  - mojo-compiler ==1.0.0
+  - mojo-moji ==0.1.0
   license: MIT OR Apache-2.0
-  size: 820714
-  timestamp: 1787303711150
-- conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-hibana-0.0.0-he8cfe8b_0.conda
-  sha256: 5c1991ba6f771293ca757cb1aab8a8bfea2ee36853f6f0b725ece48e05591b3b
-  md5: f667b1f8116fd9554e56275781415de2
+  size: 893082
+  timestamp: 1787380505171
+- conda: https://ameyanagi.github.io/mojo-channel/linux-64/mojo-yomi-0.1.1-hb0f4dca_0.conda
+  sha256: 8853ce7c075ab5028a6852ff7e06ed44159de46ae96e5c3bd3624448265bfbb3
+  md5: 365b5c8bab753cb2510ddfc4a48aebf8
   depends:
-  - mojo-compiler >=1.0.0,<2.0a0
+  - mojo-compiler ==1.0.0
   license: MIT OR Apache-2.0
-  size: 104305
-  timestamp: 1787303705054
-- conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-moji-0.0.0-he8cfe8b_0.conda
-  sha256: 0315c21f39dd737887c0cd2acbc2327bb774d399939c1555b1e39c182f2cac45
-  md5: b3c066e8701fae057a737f92c638ef2a
+  size: 443080
+  timestamp: 1787373819495
+- conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-hibana-0.1.0-he8cfe8b_0.conda
+  sha256: 8b1266795db79819f36f4f66d71ef12ef09c7637af7f5637763292f06bf2701f
+  md5: 78c0025688bd87239e79e144d92986d7
   depends:
-  - mojo-compiler >=1.0.0,<2.0a0
+  - mojo-compiler ==1.0.0
   license: MIT OR Apache-2.0
-  size: 219348
-  timestamp: 1787303698699
-- conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-mojotui-0.1.0-he8cfe8b_0.conda
-  sha256: a4214d91727a2d41fa6754e861638d7e5ed771259a512e1eff85ec845495bc8c
-  md5: bfe5ebb5337f831174bf5c138497670b
+  size: 207735
+  timestamp: 1787370902902
+- conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-moji-0.1.0-he8cfe8b_0.conda
+  sha256: 4dc2ce723787ff8318edc1b91014b1c7f9ae11460428a79daece8d5a52265a06
+  md5: 26e89295aa584683bc6874c62ca5d376
   depends:
-  - mojo-compiler >=1.0.0,<2.0a0
-  - mojo-moji
+  - mojo-compiler ==1.0.0
   license: MIT OR Apache-2.0
-  size: 820678
-  timestamp: 1787303709172
-- conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-hibana-0.0.0-h60d57d3_0.conda
-  sha256: 5429fab31ed4129759e2b76819f20a146af33e6f327b4cba65300a5b414e6d91
-  md5: 1c150ec75c4bd64ecc7a02ea5459b9aa
+  size: 269125
+  timestamp: 1787370935034
+- conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-mojotui-0.1.1-he8cfe8b_0.conda
+  sha256: 61a8548527a3bff213efcc63a8ce20e28073edec68e655dc938f70ea552bb354
+  md5: 7cdcf79b550f3bcea902423b848b7ef0
   depends:
-  - mojo-compiler >=1.0.0,<2.0a0
+  - mojo-compiler ==1.0.0
+  - mojo-moji ==0.1.0
   license: MIT OR Apache-2.0
-  size: 103389
-  timestamp: 1787303705958
-- conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-moji-0.0.0-h60d57d3_0.conda
-  sha256: 2551ba7a9dcffd22014e06bfdcbd018810b11ad5e3341f68c9d9eb4fd6f26196
-  md5: ea92376f1ed7f191dfbfd3f131de7703
+  size: 893057
+  timestamp: 1787380541312
+- conda: https://ameyanagi.github.io/mojo-channel/linux-aarch64/mojo-yomi-0.1.1-he8cfe8b_0.conda
+  sha256: 652572e6cc14eb722b3567f5cae31d7e41ab33c9849febce5dc6b9eb2bcefaf3
+  md5: 771d2fbf62d6f0c663e7ee6c7e5d544b
   depends:
-  - mojo-compiler >=1.0.0,<2.0a0
+  - mojo-compiler ==1.0.0
   license: MIT OR Apache-2.0
-  size: 218423
-  timestamp: 1787303701060
-- conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-mojotui-0.1.0-h60d57d3_0.conda
-  sha256: c2356998604d494148c37ffecc111493bcc4cd60f551f2600aa8dbe987dd30bf
-  md5: a37c684f08d3d8aba55293c0d7b255a8
+  size: 443062
+  timestamp: 1787373797904
+- conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-hibana-0.1.0-h60d57d3_0.conda
+  sha256: 68d203394aad70c84b04a49722892efe04ee2ea2f846d12a593d4db4a0d25b21
+  md5: 23141313eb5868e89a96ec648297fb4c
   depends:
-  - mojo-compiler >=1.0.0,<2.0a0
-  - mojo-moji
+  - mojo-compiler ==1.0.0
   license: MIT OR Apache-2.0
-  size: 819761
-  timestamp: 1787303709845
+  size: 206826
+  timestamp: 1787370878048
+- conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-moji-0.1.0-h60d57d3_0.conda
+  sha256: 491f6855d3bd52d533e9c463f1e0bb7ea2be2e4a7e1f1f4f13c7787b4230830b
+  md5: c2bfcca59d1fad723d597567e9188bfb
+  depends:
+  - mojo-compiler ==1.0.0
+  license: MIT OR Apache-2.0
+  size: 268221
+  timestamp: 1787370901758
+- conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-mojotui-0.1.1-h60d57d3_0.conda
+  sha256: 5b0ea957357f02635519573958b0e937981e306b2105314a0e2eee7ecfb83ac7
+  md5: 7055f7dfd78c35807d9adbd548e503a0
+  depends:
+  - mojo-compiler ==1.0.0
+  - mojo-moji ==0.1.0
+  license: MIT OR Apache-2.0
+  size: 892144
+  timestamp: 1787380412449
+- conda: https://ameyanagi.github.io/mojo-channel/osx-arm64/mojo-yomi-0.1.1-h60d57d3_0.conda
+  sha256: 3a87cfc8b25e3a0fd4fa7eb0a79bb83b350b4f14b3e3f58213879315599140fa
+  md5: 32757164fb7ddc3c02aa7d5130e12658
+  depends:
+  - mojo-compiler ==1.0.0
+  license: MIT OR Apache-2.0
+  size: 442271
+  timestamp: 1787373750013
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
   sha256: 1dd3fffd892081df9726d7eb7e0dea6198962ba775bd88842135a4ddb4deb3c9
@@ -304,6 +337,19 @@ packages:
     - icu >=78.3,<79.0a0
   size: 14459115
   timestamp: 1786545741408
+- conda: https://conda.anaconda.org/conda-forge/linux-64/jq-1.8.2-h280c20c_1.conda
+  sha256: f14c52155ba14ccb41fdd6f71d74b21153c35e131185434da7334cf25b3eef46
+  md5: 6ec056e539486e84f0c7acef6b5863f9
+  depends:
+  - oniguruma 6.9.*
+  - libgcc >=14
+  - __glibc >=2.17,<3.0.a0
+  - oniguruma >=6.9.10,<6.10.0a0
+  license: MIT
+  license_family: MIT
+  run_exports: {}
+  size: 317374
+  timestamp: 1786434969272
 - conda: https://conda.anaconda.org/conda-forge/linux-64/keyutils-1.6.3-h7cc23a3_1.conda
   sha256: dd053c96dcb0dcfd59422aefea9d2fe937a190167f34fba7893ec1e10a7e8963
   md5: ba55d1b89fd7775e67de8291029b4059
@@ -517,6 +563,19 @@ packages:
     - ncurses >=6.6,<7.0a0
   size: 911196
   timestamp: 1786355078102
+- conda: https://conda.anaconda.org/conda-forge/linux-64/oniguruma-6.9.10-h280c20c_1.conda
+  sha256: 22ba0c20d810f4e27092931191a08331b3bff1b7feeead5de7d8514cfd9230ad
+  md5: 16c8e401c682f9961676c201c888b1d9
+  depends:
+  - __glibc >=2.17,<3.0.a0
+  - libgcc >=14
+  license: BSD-2-Clause
+  license_family: BSD
+  run_exports:
+    weak:
+    - oniguruma >=6.9.10,<6.10.0a0
+  size: 279675
+  timestamp: 1786354257558
 - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.3-h35e630c_1.conda
   sha256: 012096056b97abf1f68c46b7146bd2cbd68c1be762340b4f5dad4fbbe99177bc
   md5: c5955c27917ff2234def47f075e71e02
@@ -720,6 +779,18 @@ packages:
     - icu >=78.3,<79.0a0
   size: 14688525
   timestamp: 1786545779464
+- conda: https://conda.anaconda.org/conda-forge/linux-aarch64/jq-1.8.2-h80f16a2_1.conda
+  sha256: b5fc3d450f05eda27f1d667a435425e84c66d0bd3a04f0ac28aaa4ba88e58e2a
+  md5: 266917520745dc1ca3da3dfb71365d9c
+  depends:
+  - oniguruma 6.9.*
+  - libgcc >=14
+  - oniguruma >=6.9.10,<6.10.0a0
+  license: MIT
+  license_family: MIT
+  run_exports: {}
+  size: 350336
+  timestamp: 1786434954205
 - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/keyutils-1.6.3-h5bc82ec_1.conda
   sha256: 3999b1472f1e549a0b766428e2823abf20626aac5314b474c9b76bf6eb679def
   md5: 6d9be306ecb8dfc9ff46f02cb367d5c2
@@ -915,6 +986,18 @@ packages:
     - ncurses >=6.6,<7.0a0
   size: 955422
   timestamp: 1786355019431
+- conda: https://conda.anaconda.org/conda-forge/linux-aarch64/oniguruma-6.9.10-h80f16a2_1.conda
+  sha256: 2de125162dc348c282e807c099226357f3c620e8f707d35a40d52fb5c0014495
+  md5: e8c22ebf0586bc54534856b7cc054200
+  depends:
+  - libgcc >=14
+  license: BSD-2-Clause
+  license_family: BSD
+  run_exports:
+    weak:
+    - oniguruma >=6.9.10,<6.10.0a0
+  size: 293391
+  timestamp: 1786354245797
 - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/openssl-3.6.3-h546c87b_1.conda
   sha256: c89e748e8a008e8ca6f25e102362f33319db0c98cc29d98ddada92842f636327
   md5: 1600dfde78c5adba306f8571af62a323
@@ -1306,6 +1389,18 @@ packages:
     - icu >=78.3,<79.0a0
   size: 14070242
   timestamp: 1786545847761
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/jq-1.8.2-h1a92334_1.conda
+  sha256: 2d345464da308424f15322fb848b0f845291fdf2383f709866e94825d722f550
+  md5: be1ad8bb4f91519d2a3eb2bcb6d9bc0b
+  depends:
+  - oniguruma 6.9.*
+  - __osx >=11.0
+  - oniguruma >=6.9.10,<6.10.0a0
+  license: MIT
+  license_family: MIT
+  run_exports: {}
+  size: 350634
+  timestamp: 1786434970720
 - conda: https://conda.anaconda.org/conda-forge/osx-arm64/krb5-1.22.2-h34f8a20_2.conda
   sha256: aaea1d42b07769920db2af7471ece9399d2613448863da64ad8272998db5db34
   md5: 15235dd10450d67bc25ccafd5b46d2bc
@@ -1442,6 +1537,18 @@ packages:
     - ncurses >=6.6,<7.0a0
   size: 804298
   timestamp: 1786355189145
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/oniguruma-6.9.10-h1a92334_1.conda
+  sha256: 92a6ca62564165da0c1d6c321555b8cd3e5a660512ee0466b89c46e3637a5bf7
+  md5: ffe6286c38000935f186202d469aab0a
+  depends:
+  - __osx >=11.0
+  license: BSD-2-Clause
+  license_family: BSD
+  run_exports:
+    weak:
+    - oniguruma >=6.9.10,<6.10.0a0
+  size: 256169
+  timestamp: 1786354290452
 - conda: https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.6.3-hd24854e_1.conda
   sha256: 66be2283b5b37dcda1332b5e74c1782a8cb14fd2e62e0d38017c2d35bf73c119
   md5: 65d1906712b85d1679263c518d011b5b

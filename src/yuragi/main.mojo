@@ -1,4 +1,4 @@
-from std.collections import List
+from std.collections import List, Optional
 from std.io import FileDescriptor
 from std.sys import argv, exit, stderr, stdin
 
@@ -17,9 +17,10 @@ from yuragi.pipeline import (
     InitialAutomationAction,
     InitialAutomationDecision,
     initial_automation_indexed,
+    language_mode,
     matching_backend_required,
-    select,
-    select_ranked,
+    search_indexed,
+    select_indexed,
     validate_foundation_mode,
 )
 from yuragi.search_index import SearchIndex
@@ -103,8 +104,15 @@ def main():
         print("yuragi: input error: ", error, sep="", file=stderr)
         exit(2)
 
+    var prepared_index: Optional[SearchIndex] = None
+    try:
+        prepared_index = SearchIndex(candidates^, language_mode(options))
+    except error:
+        print("yuragi: search index error: ", error, sep="", file=stderr)
+        exit(2)
+    var index = prepared_index.take()
+
     if not options.has_filter:
-        var index = SearchIndex(candidates^)
         var initial = InitialAutomationDecision()
         try:
             initial = initial_automation_indexed(index, options)
@@ -131,16 +139,21 @@ def main():
         if action == InitialAutomationAction.EXIT_NO_MATCH:
             exit(1)
 
-        var finder = FinderSession(index^, options, initial_matches^, total_matches)
+        var prepared_finder: Optional[FinderSession] = None
         var outcome = FinderOutcome.ABORTED
         try:
+            prepared_finder = FinderSession(
+                index^, options, initial_matches^, total_matches
+            )
+            ref finder = prepared_finder.value()
             outcome = finder.run()
         except error:
             print("yuragi: terminal error: ", error, sep="", file=stderr)
             exit(2)
+        var finder = prepared_finder.take()
         if outcome == FinderOutcome.ABORTED:
             exit(130)
-        var selected = finder.selection()
+        var selected = finder.take_selection()
         if len(selected) == 0:
             exit(1)
         print(render_candidates(selected^, output_framing), end="")
@@ -148,13 +161,14 @@ def main():
 
     try:
         if options.explain:
-            var ranked = select_ranked(candidates, options)
+            var page = search_indexed(index, options)
+            var ranked = page^.take_rows()
             if len(ranked) == 0:
                 exit(1)
             print(render_explanation(ranked^), end="")
             return
 
-        var selected = select(candidates^, options)
+        var selected = select_indexed(index, options)
         if matching_backend_required(options) and len(selected) == 0:
             exit(1)
         var output_framing = (

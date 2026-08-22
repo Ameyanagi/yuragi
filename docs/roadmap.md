@@ -3,20 +3,23 @@
 ## v0.1 — Foundation
 
 - [x] Stabilize newline-delimited UTF-8 stdin/stdout and CLI error contracts.
-- Integrate pinned Moji text views and transformed-to-source mappings.
+- [x] Integrate pinned Moji text views and transformed-to-source mappings.
 - [x] Integrate pinned Hibana deterministic scoring, positions, and stable ranking.
-- Publish and integrate pinned Yomi phonetic representations for `auto`, `zh`, `ja`, and
-  `ko` without losing source ranges.
-- Make `printf "北京大学\nnotes\n" | yuragi --lang zh --filter bjdx` emit the
+- [x] Integrate pinned Yomi phonetic representations for explicit `zh`, `ja`,
+  and `ko` modes without losing source ranges; keep `auto` direct-only.
+- [x] Make `printf "北京大学\nnotes\n" | yuragi --lang zh --filter bjdx` emit the
   correct original candidate.
 - [x] Add unit, reference-value, invariant, and executable CLI/PTY
   coverage on every supported target.
 - [x] Build and test the Conda application package from a clean source archive.
 
-Direct-text filtering, the interactive picker, exact incremental match-set
-reuse, and Yomi's source-side typed multi-key APIs are implemented. Product
-phonetic indexing remains gated only on immutable Hibana/Yomi package releases;
-see `PLAN.md` for the publication and integration order.
+Direct and explicit-language filtering, the interactive picker, exact
+incremental match-set reuse where semantically safe, and source-mapped typed
+multi-key orchestration are implemented. Internally, both product workflows use
+one construct-then-search `SearchIndex` pattern. The `0.1.0` distribution
+installs only the executable; the internal modules are not a supported Mojo
+library package. Japanese Kanji dictionary lookup remains an explicit provider
+boundary; see `PLAN.md`.
 
 ## v0.2 — Usability
 
@@ -47,5 +50,5 @@ see `PLAN.md` for the publication and integration order.
 ## Not planned
 
 Reusable fuzzy algorithms, Unicode primitives, phonetic tables, terminal
-widgets, a public library API, filesystem indexing, and a GUI toolkit belong in
-their owning projects or later applications.
+widgets, an installed Yuragi library package, filesystem indexing, and a GUI
+toolkit belong in their owning projects or later applications.

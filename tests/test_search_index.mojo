@@ -5,6 +5,7 @@ from std.collections import List
 from std.testing import TestSuite, assert_equal, assert_true
 
 from yuragi.candidate import candidates_from_text
+from yuragi.language import LanguageMode
 from yuragi.options import Options
 from yuragi.pipeline import search_picker_query
 from yuragi.search_index import SearchIndex
@@ -173,6 +174,69 @@ def test_query_edit_sequence_matches_stateless_exact_oracle() raises:
             actual == expected,
             String("incremental index diverged at query index ", query_index),
         )
+
+
+def _assert_huge_limit_matches_candidate_count_limit(
+    language: LanguageMode,
+    corpus: StringSlice,
+    query: StringSlice,
+) raises:
+    var expected_candidates = candidates_from_text(corpus)
+    var expected_index = SearchIndex(expected_candidates^, language)
+    var expected = expected_index.search(query, limit=len(expected_index))
+
+    var actual_candidates = candidates_from_text(corpus)
+    var actual_index = SearchIndex(actual_candidates^, language)
+    var actual = actual_index.search(query, limit=Int.MAX)
+
+    assert_true(actual == expected)
+    assert_equal(actual.total_matches, expected.total_matches)
+    assert_true(len(actual.rows) <= len(actual_index))
+
+
+def test_near_int_max_limit_is_capped_before_allocation_for_every_mode() raises:
+    _assert_huge_limit_matches_candidate_count_limit(
+        LanguageMode.AUTO,
+        "alpha\nalpine\nbeta\n",
+        "a",
+    )
+    _assert_huge_limit_matches_candidate_count_limit(
+        LanguageMode.JA,
+        "カメラ\nテレビ\n",
+        "kamera",
+    )
+    _assert_huge_limit_matches_candidate_count_limit(
+        LanguageMode.ZH,
+        "北京大学\n上海站\n",
+        "bjdx",
+    )
+    _assert_huge_limit_matches_candidate_count_limit(
+        LanguageMode.KO,
+        "한글\n서울\n",
+        "hangeul",
+    )
+
+
+def test_near_int_max_limit_preserves_empty_and_identity_semantics() raises:
+    for language in [
+        LanguageMode.AUTO,
+        LanguageMode.JA,
+        LanguageMode.ZH,
+        LanguageMode.KO,
+    ]:
+        var empty_candidates = candidates_from_text("")
+        var empty_index = SearchIndex(empty_candidates^, language)
+        var empty_page = empty_index.search("anything", limit=Int.MAX)
+        assert_equal(empty_page.total_matches, 0)
+        assert_equal(len(empty_page.rows), 0)
+
+        var identity_candidates = candidates_from_text("one\ntwo\n")
+        var identity_index = SearchIndex(identity_candidates^, language)
+        var identity_page = identity_index.search("", limit=Int.MAX)
+        assert_equal(identity_page.total_matches, 2)
+        assert_equal(len(identity_page.rows), 2)
+        assert_equal(identity_page.rows[0].text, "one")
+        assert_equal(identity_page.rows[1].text, "two")
 
 
 def main() raises:

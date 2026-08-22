@@ -6,7 +6,7 @@ from std.collections import List
 from yuragi.shell import ShellKind
 
 
-comptime VERSION = "0.0.0"
+comptime VERSION = "0.1.0"
 
 
 struct CommandKind(Copyable, Equatable, ImplicitlyCopyable):
@@ -299,8 +299,8 @@ def usage() -> String:
         "\n"
         "Read newline-delimited candidates from standard input and write selected\n"
         "candidates to standard output. Without --filter, open an inline picker;\n"
-        "filter mode uses direct Hibana fuzzy matching. Phonetic language matching\n"
-        "awaits Yomi integration.\n"
+        "filter and interactive modes share one prepared search index. auto keeps\n"
+        "direct matching; ja, zh, and ko opt into bounded Yomi phonetic keys.\n"
         "Smart case is the default: a query containing an ASCII uppercase letter\n"
         "matches case-sensitively.\n"
         "\n"
@@ -311,7 +311,7 @@ def usage() -> String:
         "  -0, --exit-0          exit 1 on no initial matches without the picker\n"
         "  -m, --multi           select multiple candidates with TAB/Shift-TAB\n"
         "      --limit N         emit at most N best-ranked candidates\n"
-        "      --lang LANGUAGE   phonetic language hint (default: auto)\n"
+        "      --lang LANGUAGE   auto (direct), ja, zh, or ko (default: auto)\n"
         "  -i, --ignore-case     match case-insensitively (ASCII)\n"
         "  +i, --no-ignore-case  match case-sensitively\n"
         "      --read0           read NUL-delimited candidates from standard input\n"
@@ -333,7 +333,8 @@ def usage() -> String:
         "and are usage errors with --filter.\n"
         "Keybindings: Enter accepts; TAB marks and moves down; Shift-TAB marks\n"
         "and moves up in --multi mode. Both are inert without --multi.\n"
-        "Ctrl-U clears the query; Ctrl-W deletes the trailing word.\n"
+        "Left/Right/Home/End move the query cursor; Backspace/Delete edit.\n"
+        "Ctrl-U clears; Ctrl-W deletes the previous word; Ctrl-Z/Y undo/redo.\n"
         "\n"
         "Invalid options exit before informational modes. If both --help and\n"
         "--version are validly supplied, --help wins.\n"

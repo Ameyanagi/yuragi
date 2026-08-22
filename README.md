@@ -1,6 +1,6 @@
 # Yuragi
 
-> **Experimental — API not yet released.**
+> **Experimental — pre-1.0 command-line contracts may still evolve.**
 
 A CJK-aware fuzzy finder written in Mojo.
 
@@ -11,10 +11,12 @@ than exporting foundation algorithms.
 
 The current implementation accepts candidates on standard input and provides
 both an inline interactive picker and deterministic noninteractive `--filter`
-output through direct fuzzy matching. Interactive query extensions reuse the
-previous complete exact match set through a persistent `SearchIndex`; arbitrary
-edits fall back to a full scan. Phonetic representations remain gated on the
-first immutable Yomi package release.
+output. Internally, both workflows construct one prepared `SearchIndex` and
+call its one search method. This is an application implementation detail, not
+an installed Mojo library API. Explicit `ja`, `zh`, and `ko` modes add bounded
+Yomi phonetic keys and map generated-key matches back to the original
+candidate. `auto` deliberately means direct-text search only; it does not guess
+a language from mixed Unicode input.
 The project is independently installable and does not require any application
 from the wider ecosystem.
 
@@ -23,7 +25,7 @@ from the wider ecosystem.
 Install the published application with Pixi:
 
 ```sh
-pixi global install yuragi \
+pixi global install "yuragi==0.1.0" \
   --channel https://ameyanagi.github.io/mojo-channel \
   --channel https://conda.modular.com/max \
   --channel conda-forge
@@ -54,23 +56,10 @@ documented.
 
 ## Quickstart
 
-This program parses a filter query, ingests candidates, ranks them through
-Yuragi's application pipeline, and renders the matches:
+Pipe candidates to the executable and give `--filter` one query:
 
-```mojo
-from std.collections import List
-
-from yuragi.candidate import candidates_from_text, render_candidates
-from yuragi.options import parse_options
-from yuragi.pipeline import select
-
-
-def main() raises:
-    var args: List[String] = ["yuragi", "--filter", "ba"]
-    var options = parse_options(args^)
-    var candidates = candidates_from_text("apple\nbanana\nbar\n")
-    var selected = select(candidates^, options)
-    print(render_candidates(selected^), end="")
+```sh
+printf 'apple\nbanana\nbar\n' | yuragi --filter ba
 ```
 
 Expected output:
@@ -80,12 +69,27 @@ banana
 bar
 ```
 
+Yuragi `0.1.0` installs and supports one application executable, not a Mojo
+library package. Its `SearchIndex` and other modules remain internal. Hibana,
+Moji, Yomi, and MojoTUI provide the reusable foundation APIs.
+
+Mojo programs integrate with Yuragi through ordinary UTF-8 records, so no
+application-specific API is required:
+
+```mojo
+def main():
+    print("北京大学")
+    print("notes")
+```
+
+Build that producer and pipe it into `yuragi --lang zh --filter bjdx` to select
+the original `北京大学` record.
+
 ## Application package
 
 Yuragi installs an executable named `yuragi`. Its internal Mojo modules live
-under `src/yuragi/`; they are application implementation details rather than a
-separately supported library API. The Conda distribution is also named
-`yuragi`.
+under `src/yuragi/`; the distribution does not install or support them as an
+importable Mojo package. The Conda distribution is also named `yuragi`.
 
 The executable implements validated options, buffered UTF-8 stdin ingestion,
 stable candidate framing, deterministic stdout, and an inline interactive
@@ -96,8 +100,7 @@ failing. An empty filter query is an identity filter:
 printf "北京大学\nnotes\n" | pixi run yuragi --filter ''
 ```
 
-Non-empty queries now rank candidates through the installed Hibana Conda
-package:
+Non-empty queries rank candidates through the installed Hibana package:
 
 ```sh
 printf 'apple\nbanana\n' | pixi run yuragi --filter ba
@@ -111,11 +114,12 @@ retained match, in ranked order:
 RANK<TAB>SCORE<TAB>KEY<TAB>POSITIONS<TAB>TEXT
 ```
 
-`RANK` is one-based, `SCORE` is Hibana's integer score, `KEY` is currently
-`original`, and `POSITIONS` contains comma-separated zero-based Unicode scalar
-indices. `TEXT` is the unmodified candidate. TEXT is last so the first four
-fields are tab-free and a consumer can split on the first four tabs even when
-TEXT itself contains tabs.
+`RANK` is one-based, `SCORE` is the weighted Hibana score, and `KEY` identifies
+the winning direct or language-specific key. `POSITIONS` always contains
+comma-separated zero-based Unicode scalar indices in the original display
+text, even when the match used a generated phonetic key. `TEXT` is the
+unmodified candidate. TEXT is last so the first four fields are tab-free and a
+consumer can split on the first four tabs even when TEXT itself contains tabs.
 
 ```sh
 printf 'apple\nbanana\n' | pixi run yuragi --filter ba --explain
@@ -123,10 +127,36 @@ printf 'apple\nbanana\n' | pixi run yuragi --filter ba --explain
 ```
 
 Use `--limit N` to emit at most the best N candidates. A non-empty query that
-matches nothing exits with status 1 and writes no candidate output. Phonetic
-language matching still awaits Yomi; Yuragi does not duplicate CJK logic. See
-[PLAN.md](PLAN.md) for the remaining dependency gates and exact v0.1 acceptance
-criteria.
+matches nothing exits with status 1 and writes no candidate output.
+
+## Language modes
+
+Language selection is explicit and small:
+
+| Mode | Search keys | Example |
+| --- | --- | --- |
+| `auto` | Original/direct text only | `--lang auto --filter 京` |
+| `zh` | Direct text plus bounded pinyin keys | `--lang zh --filter bjdx` |
+| `ja` | Direct text plus bounded kana/romaji keys | `--lang ja --filter kamera` |
+| `ko` | Direct text plus bounded Hangul romanized, initial, and keyboard keys | `--lang ko --filter hangeul` |
+
+```sh
+printf '北京大学\n上海\n' | yuragi --lang zh --filter bjdx
+# 北京大学
+
+printf 'カメラ\n東京\n' | yuragi --lang ja --filter kamera
+# カメラ
+
+printf '한글\n서울\n' | yuragi --lang ko --filter hangeul
+# 한글
+```
+
+Japanese kana and romaji are built in through Yomi. General Kanji readings are
+not guessed: they require a separately licensed dictionary/provider, which is
+not bundled in `0.1.0`. For example, `日本語` is still searchable directly, but
+`nihongo` is not promised without such a provider. `auto` remains direct-only
+for the same reason—it is a deterministic default, not partial language
+detection.
 
 Use `--read0` and `--print0` for NUL framing when filenames can contain
 newlines. Smart case is the default; `--ignore-case` and `--no-ignore-case`
@@ -161,19 +191,37 @@ with `--filter`.
 
 | Keys | Action |
 | --- | --- |
-| Enter | Accept marks, or the cursor candidate when no marks exist |
+| Enter | Accept marks, or the cursor candidate; with no match, stay open |
 | Esc, Ctrl-C | Abort |
 | Down, Ctrl-N | Move to the next candidate |
 | Up, Ctrl-P | Move to the previous candidate |
 | TAB | With `--multi`, toggle the cursor mark and move down |
 | Shift-TAB | With `--multi`, toggle the cursor mark and move up |
-| Backspace | Erase the last query grapheme |
+| Left/Right, Ctrl-B/Ctrl-F | Move the query cursor by grapheme |
+| Shift-Left/Shift-Right | Extend the query selection by grapheme |
+| Home/End, Ctrl-A/Ctrl-E | Move to the start/end of the query |
+| Backspace, Ctrl-H | Delete the previous grapheme or selection |
+| Delete, Ctrl-D | Delete the next grapheme or selection |
+| Ctrl-K | Delete from the cursor to the end of the query |
 | Ctrl-U | Clear the query |
-| Ctrl-W | Delete the trailing word from the query |
+| Ctrl-W | Delete the previous Unicode word |
+| Ctrl-X/Ctrl-V | Cut/paste through the query editor clipboard |
+| Ctrl-Z/Ctrl-Y | Undo/redo a query edit |
+| Bracketed paste | Insert normalized one-line text as one undoable transaction |
 
 Marks follow candidate source identities, so they survive query refinement
 even while a marked candidate is absent from the current matches. TAB and
 Shift-TAB are inert without `--multi`.
+
+For terminal safety and unambiguous rows, the interactive list uses an
+injective display grammar. Every C0, DEL, or C1 scalar becomes a fixed uppercase
+eight-ASCII-scalar escape such as `\u{000A}` or `\u{009B}`; every literal
+backslash becomes `\\`; all other scalars remain unchanged. A highlight on one
+escaped source scalar spans its complete eight- or two-scalar display form.
+These substitutions affect display cells only: Yuragi retains the original
+candidate record and emits its original valid UTF-8 bytes and requested record
+framing when selected. Invalid UTF-8 retains the documented lossy-decoding
+behavior.
 
 An empty prompt is a lazy identity view: it preserves the exact full count and
 source order but materializes only the rows visible in the terminal. This keeps
@@ -223,7 +271,7 @@ does not claim compatibility through an incomplete hand-written subset.
 - `benchmarks/`: reproducible fair-search and profiler-oriented benchmarks
 - `docs/`: architecture, design, compatibility, roadmap, and release policy
 - `conda.recipe/`: local Rattler build recipe
-- `PLAN.md`: dependency-gated implementation plan and acceptance evidence
+- `PLAN.md`: product boundaries, release gates, and acceptance evidence
 
 See [the architecture](docs/architecture.md), [design principles](docs/design.md),
 and [roadmap](docs/roadmap.md) before proposing a new dependency or feature.

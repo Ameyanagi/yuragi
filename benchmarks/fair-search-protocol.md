@@ -22,6 +22,9 @@ retain 20 rows. The fixed cases are:
 | repeat base | `component1` | 3,439 / 40,951 |
 | extension | `component1` -> `component100` | 37 / 856 remain |
 
+Before timing, Yuragi asserts locked literal checksums for the ordered corpus
+and every expected result, so corpus, ranking, or position drift fails the run.
+
 Yuragi forces and measures full scans for every standalone query. It also times
 the second, incremental operation after an untimed setup query. Its output
 includes `scanned`, so a benchmark fails if the persistent `SearchIndex` stops
@@ -31,7 +34,7 @@ full `component1` and `component100` searches are the same-query comparators.
 Run the optimized harnesses:
 
 ```sh
-pixi run bench-fair
+pixi run --locked bench-fair
 
 cd ../yuru
 cargo bench --bench search fair_compare
@@ -42,15 +45,20 @@ RAYON_NUM_THREADS=1 cargo bench --bench search \
 ```
 
 Yuru uses Criterion with 30 samples and reports robust intervals. Yuragi uses
-31 independent samples after warmup and prints nearest-rank p50/p95, never only
-the fastest observation. Record hardware, OS, compiler versions, thread
-settings, and commits with any published result.
+three unreported warmups followed by 31 independent measured samples and prints
+nearest-rank p50/p95, never only the fastest observation. Record hardware, OS,
+compiler versions, thread settings, and commits with any published result.
 
 ## Reference run
 
 Measured 2026-08-22 on an Apple M4 (10 physical cores), macOS 26.5.1, Rust
 1.95.0, and Mojo 1.0.0. Values are milliseconds. Yuru shows its Criterion
 central estimate; Yuragi shows p50/p95.
+
+This is a historical pre-prepared-index result. Its exact source commit was not
+recorded, so it must not be presented as `0.1.0` release or CJK evidence. A new
+release comparison must record both exact commits and follow the current
+3-warmup/31-sample protocol.
 
 | Search | Size | Yuru default | Yuragi full | Yuragi indexed |
 | --- | ---: | ---: | ---: | ---: |
@@ -72,8 +80,10 @@ and extending to `component100` is 2.21x faster than the same-query full scan.
 Preparation is intentionally separate. Yuru's index-build central estimates
 were 1.579 ms at 10k and 3.466 ms at 100k after an untimed corpus clone. Yuragi
 candidate materialization p50/p95 was 0.899/0.963 ms and 8.376/8.891 ms;
-`SearchIndex` currently only takes ownership. These rows measure different work
-and are not a valid speed ratio.
+the historical `SearchIndex` measured here only took ownership. The `0.1.0`
+index instead prepares and owns its Hibana corpus plus a bounded key family for
+each candidate. These rows measure different work and are not a valid speed
+ratio for either the historical implementations or the current release.
 
 ## Limits
 
@@ -82,7 +92,9 @@ and are not a valid speed ratio.
 - Both scan their selected candidate set and retain top 20. Yuragi also computes
   exact pre-limit cardinality and match positions; Yuru does not expose total
   match cardinality through this API.
-- Yuru is parallel at 100k by default; Yuragi is currently single-threaded.
+- Yuru is parallel at 100k by default. Current Yuragi large `AUTO` full searches
+  use Hibana's exact coarse parallel shards; explicit CJK modes remain serial.
+  The historical Yuragi values above predate that parallel path.
 - No portable retained-heap value is reported. RSS combines runtime, allocator
   high-water marks, corpus, and index memory. Common allocation instrumentation
   is required before publishing a memory ratio.

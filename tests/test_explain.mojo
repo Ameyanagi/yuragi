@@ -3,7 +3,7 @@
 from std.collections import List
 from std.testing import TestSuite, assert_equal
 
-from yuragi.explain import KEY_KIND_ORIGINAL, render_explanation
+from yuragi.explain import render_explanation
 from yuragi.ranking import RankedCandidate
 
 
@@ -23,8 +23,8 @@ def test_render_explanation_golden_output() raises:
     var lines = rendered.split("\n")
     var first_fields = lines[0].split("\t")
     var second_fields = lines[1].split("\t")
-    assert_equal(first_fields[2], KEY_KIND_ORIGINAL)
-    assert_equal(second_fields[2], KEY_KIND_ORIGINAL)
+    assert_equal(first_fields[2], "original")
+    assert_equal(second_fields[2], "original")
     assert_equal(len(second_fields), 6)
 
 

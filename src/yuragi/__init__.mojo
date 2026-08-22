@@ -1,1 +1,1 @@
-"""Yuragi is an application and intentionally has no public library API."""
+"""Application-internal modules for the Yuragi binary."""

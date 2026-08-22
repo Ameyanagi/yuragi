@@ -2,6 +2,7 @@
 
 from hibana import Matcher, TopK
 from std.collections import List
+from yomi import SearchKeyKind
 
 from yuragi.candidate import Candidate
 
@@ -13,6 +14,7 @@ struct RankedCandidate(Copyable, Equatable):
     var text: String
     var score: Int
     var positions: List[Int]
+    var key_kind: SearchKeyKind
 
     def __init__(
         out self,
@@ -20,12 +22,14 @@ struct RankedCandidate(Copyable, Equatable):
         var text: String,
         score: Int,
         var positions: List[Int],
+        key_kind: SearchKeyKind = SearchKeyKind.ORIGINAL,
     ):
         """Create a ranked value from owned candidate text and positions."""
         self.source_index = source_index
         self.text = text^
         self.score = score
         self.positions = positions^
+        self.key_kind = key_kind
 
     def __eq__(self, other: Self) -> Bool:
         """Return whether every public ranked-candidate field is equal."""
@@ -33,6 +37,7 @@ struct RankedCandidate(Copyable, Equatable):
             self.source_index != other.source_index
             or self.text != other.text
             or self.score != other.score
+            or self.key_kind != other.key_kind
             or len(self.positions) != len(other.positions)
         ):
             return False

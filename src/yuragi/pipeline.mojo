@@ -4,6 +4,7 @@ from hibana import Matcher, Scheme
 from std.collections import List
 
 from yuragi.candidate import Candidate
+from yuragi.language import LanguageMode
 from yuragi.options import Options
 from yuragi.ranking import (
     RankedCandidate,
@@ -77,27 +78,36 @@ def matching_backend_required(options: Options) -> Bool:
 
 
 def validate_foundation_mode(options: Options) raises:
-    """Reject invalid report combinations and unavailable phonetic modes."""
+    """Reject combinations that cannot preserve Yuragi's output contract."""
     if options.explain and not options.has_filter:
         raise Error("--explain is a filter-mode report and requires --filter QUERY")
     if options.explain and options.print0:
         raise Error(
             "--explain writes a line-oriented report and conflicts with --print0"
         )
+    if options.explain and options.read0:
+        raise Error(
+            "--explain cannot be used with --read0 because a line-oriented "
+            "TSV report cannot safely represent NUL-framed records"
+        )
     if options.explain and options.query == "":
         raise Error(
             "--explain requires a non-empty --filter query; an empty query "
             "performs no matching"
         )
-    if options.has_language and options.language != "auto":
-        raise Error(
-            "--lang ",
-            options.language,
-            (
-                " phonetic matching awaits the Yomi integration; direct matching "
-                "works without --lang"
-            ),
-        )
+
+
+def language_mode(options: Options) raises -> LanguageMode:
+    """Translate the validated CLI spelling to the nominal core language."""
+    if options.language == "auto":
+        return LanguageMode.AUTO
+    if options.language == "ja":
+        return LanguageMode.JA
+    if options.language == "zh":
+        return LanguageMode.ZH
+    if options.language == "ko":
+        return LanguageMode.KO
+    raise Error("unsupported language mode: ", options.language)
 
 
 def rank_query(
@@ -215,6 +225,23 @@ def initial_automation_indexed(
     return InitialAutomationDecision(action, matches^, total_matches)
 
 
+def search_indexed(mut index: SearchIndex, options: Options) raises -> SearchPage:
+    """Search a prepared index for filter mode without rebuilding its corpus."""
+    validate_foundation_mode(options)
+    var limit = options.limit if options.has_limit else max(len(index), 1)
+    return index.search(options.query, options.case_mode, limit)
+
+
+def select_indexed(mut index: SearchIndex, options: Options) raises -> List[Candidate]:
+    """Resolve filter rows from the same prepared index used by every workflow."""
+    var page = search_indexed(index, options)
+    var rows = page^.take_rows()
+    var selected = List[Candidate](capacity=len(rows))
+    for row in rows:
+        selected.append(Candidate(row.source_index, String(row.text)))
+    return selected^
+
+
 def select_ranked(
     candidates: Span[Candidate, _], options: Options
 ) raises -> List[RankedCandidate]:
@@ -252,6 +279,7 @@ def _select_validated(
 
 
 def select(var candidates: List[Candidate], options: Options) raises -> List[Candidate]:
-    """Apply validated empty-query or ranked noninteractive selection."""
+    """Build one prepared index and apply noninteractive selection."""
     validate_foundation_mode(options)
-    return _select_validated(candidates^, options)
+    var index = SearchIndex(candidates^, language_mode(options))
+    return select_indexed(index, options)

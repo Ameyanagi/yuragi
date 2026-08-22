@@ -12,6 +12,7 @@ import subprocess
 import sys
 import termios
 import time
+import unicodedata
 from pathlib import Path
 from typing import Callable
 
@@ -32,6 +33,7 @@ class TerminalScreen:
         self.saved_row = 0
         self.saved_column = 0
         self.pending = bytearray()
+        self.utf8_pending = bytearray()
 
     def feed(self, data: bytes) -> None:
         self.pending.extend(data)
@@ -116,6 +118,19 @@ class TerminalScreen:
             self.column = self.saved_column
 
     def _consume_byte(self, value: int) -> None:
+        if self.utf8_pending or value >= 0x80:
+            self.utf8_pending.append(value)
+            try:
+                text = self.utf8_pending.decode("utf-8")
+            except UnicodeDecodeError as error:
+                if error.reason == "unexpected end of data":
+                    return
+                self.utf8_pending.clear()
+                return
+            self.utf8_pending.clear()
+            for character in text:
+                self._write_character(character)
+            return
         if value == 0x0D:
             self.column = 0
         elif value == 0x0A:
@@ -125,8 +140,20 @@ class TerminalScreen:
         elif value == 0x09:
             self.column = min((self.column // 8 + 1) * 8, self.columns - 1)
         elif 0x20 <= value <= 0x7E:
-            self.cells[self.row][self.column] = chr(value)
-            self.column = min(self.column + 1, self.columns - 1)
+            self._write_character(chr(value))
+
+    def _write_character(self, character: str) -> None:
+        if unicodedata.combining(character) or unicodedata.category(character) in (
+            "Cf",
+            "Me",
+            "Mn",
+        ):
+            return
+        width = 2 if unicodedata.east_asian_width(character) in ("F", "W") else 1
+        self.cells[self.row][self.column] = character
+        if width == 2 and self.column + 1 < self.columns:
+            self.cells[self.row][self.column + 1] = ""
+        self.column = min(self.column + width, self.columns - 1)
 
     def line(self, row: int) -> str:
         return "".join(self.cells[row]).rstrip()
@@ -232,7 +259,10 @@ def wait_for_initial_picker(
     *,
     multi: bool = False,
 ) -> None:
-    counter = "3/3 (0)" if multi else "3/3"
+    counter = (
+        "lang=auto matches=3/3 retained=3 shown=3 marks="
+        + ("0" if multi else "0")
+    )
 
     def picker_is_ready(current: TerminalScreen) -> bool:
         return (
@@ -248,7 +278,7 @@ def wait_for_initial_picker(
         process,
         output,
         screen,
-        f"initial {counter} picker with all candidates",
+        "initial picker status with all candidates",
         picker_is_ready,
     )
     attributes = termios.tcgetattr(slave)
@@ -288,7 +318,7 @@ def drive_picker_accepts(
         screen,
         "query 'b' with counter 1/3",
         lambda current: current.line(0).startswith("> b")
-        and current.line(1).startswith("1/3"),
+        and current.line(1).startswith("lang=auto matches=1/3"),
     )
     os.write(master, b"r")
     read_until(
@@ -355,7 +385,7 @@ def drive_control_u_clears_query(
         screen,
         "empty query with counter 3/3 after Ctrl-U",
         lambda current: current.line(0) == ">"
-        and current.line(1).startswith("3/3"),
+        and current.line(1).startswith("lang=auto matches=3/3"),
     )
     os.write(master, b"\x1b")
 
@@ -388,9 +418,89 @@ def drive_control_w_deletes_word(
         screen,
         "empty query with counter 3/3 after Ctrl-W",
         lambda current: current.line(0) == ">"
-        and current.line(1).startswith("3/3"),
+        and current.line(1).startswith("lang=auto matches=3/3"),
     )
     os.write(master, b"\x1b")
+
+
+def drive_terminal_editor_bindings(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    wait_for_initial_picker(name, master, slave, process, output, screen)
+    os.write(master, b"lpha")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "partial query before Ctrl-A",
+        lambda current: current.line(0).startswith("> lpha"),
+    )
+
+    # Ctrl-A must move to the start, not select all as in the generic editor
+    # keymap. Inserting `a` therefore restores the exact `alpha` query.
+    os.write(master, b"\x01a")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "Ctrl-A line start without select-all",
+        lambda current: current.line(0).startswith("> alpha")
+        and current.line(1).startswith("lang=auto matches=1/3"),
+    )
+
+    # Ctrl-A, Ctrl-F, Ctrl-K leaves the first grapheme. Undo restores the
+    # query through the unchanged default Ctrl-Z binding.
+    os.write(master, b"\x01\x06\x0b")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "Ctrl-F movement and Ctrl-K kill-to-end",
+        lambda current: current.line(0) == "> a",
+    )
+    os.write(master, b"\x1a")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "Ctrl-Z restores Ctrl-K transaction",
+        lambda current: current.line(0).startswith("> alpha"),
+    )
+
+    os.write(master, b"\x05\x02\x08")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "Ctrl-E, Ctrl-B, and Ctrl-H edit at the caret",
+        lambda current: current.line(0).startswith("> alpa"),
+    )
+    os.write(master, b"\x1a\x01\x04")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "Ctrl-D forward deletion",
+        lambda current: current.line(0).startswith("> lpha"),
+    )
+    os.write(master, b"\x1a\r")
 
 
 def drive_multi(
@@ -492,6 +602,213 @@ def drive_multi_reverse_order(
     os.write(master, b"\r")
 
 
+def drive_paste_transaction(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    wait_for_initial_picker(name, master, slave, process, output, screen)
+    os.write(master, b"\x1b[200~br\n\x1b[201~")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "one sanitized paste with one retained match",
+        lambda current: current.line(0).startswith("> br")
+        and current.line(1).startswith("lang=auto matches=1/3 retained=1"),
+    )
+    os.write(master, b"\r")
+
+
+def drive_no_match_enter_stays_open(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "no-match guidance",
+        lambda current: current.line(1).startswith("lang=auto matches=0/3")
+        and current.contains("No matches"),
+    )
+    os.write(master, b"\r")
+    time.sleep(0.1)
+    if process.poll() is not None:
+        fail(name, "Enter closed a picker with no selected row", output, screen)
+    os.write(master, b"\x1b")
+
+
+def drive_language_match(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    language = name.split()[0]
+    expected_matches = 2 if language == "ko" else 1
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        f"{language} language status and phonetic match",
+        lambda current: current.line(1).startswith(
+            f"lang={language} matches={expected_matches}/"
+        ),
+    )
+    os.write(master, b"\r")
+
+
+def wait_for_control_candidates(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "distinct sanitized control candidate rows",
+        lambda current: current.line(1).startswith(
+            "lang=auto matches=2/2 retained=2 shown=2 marks=0"
+        )
+        and current.selected(r"a\u{000A}b")
+        and current.contains("ab"),
+    )
+    attributes = termios.tcgetattr(slave)
+    if int(attributes[3]) & (termios.ICANON | termios.ECHO):
+        fail(name, "controlling terminal did not enter raw mode", output, screen)
+
+
+def drive_read0_accepts_control_candidate(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    wait_for_control_candidates(name, master, slave, process, output, screen)
+    os.write(master, b"\r")
+
+
+def drive_read0_accepts_plain_candidate(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    wait_for_control_candidates(name, master, slave, process, output, screen)
+    os.write(master, b"\x1b[B")
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "plain candidate selected independently of the control candidate",
+        lambda current: current.selected("ab")
+        and current.contains(r"a\u{000A}b"),
+    )
+    os.write(master, b"\r")
+
+
+def drive_c1_candidate(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "inert C1 escape in the selected row",
+        lambda current: current.line(1).startswith(
+            "lang=auto matches=2/2 retained=2 shown=2 marks=0"
+        )
+        and current.selected(r"a\u{009B}b")
+        and current.contains("plain"),
+    )
+    attributes = termios.tcgetattr(slave)
+    if int(attributes[3]) & (termios.ICANON | termios.ECHO):
+        fail(name, "controlling terminal did not enter raw mode", output, screen)
+    os.write(master, b"\r")
+
+
+def drive_injective_collision_pair(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    if name.startswith("C0"):
+        actual_display = r"a\u{000A}b"
+        literal_display = "a␊b"
+    else:
+        actual_display = r"c\u{009B}d"
+        literal_display = r"c\\u{009B}d"
+
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "both visually distinct sides of the display collision pair",
+        lambda current: current.line(1).startswith(
+            "lang=auto matches=2/2 retained=2 shown=2 marks=0"
+        )
+        and current.selected(actual_display)
+        and current.contains(literal_display),
+    )
+    attributes = termios.tcgetattr(slave)
+    if int(attributes[3]) & (termios.ICANON | termios.ECHO):
+        fail(name, "controlling terminal did not enter raw mode", output, screen)
+
+    if "literal" in name:
+        os.write(master, b"\x1b[B")
+        read_until(
+            name,
+            master,
+            process,
+            output,
+            screen,
+            "literal side selected independently",
+            lambda current: current.selected(literal_display)
+            and current.contains(actual_display),
+        )
+    os.write(master, b"\r")
+
+
 def run_case(
     binary: Path,
     name: str,
@@ -501,6 +818,7 @@ def run_case(
     *,
     driver: Driver | None = None,
     check_restoration: bool = False,
+    candidates: bytes = CANDIDATES,
 ) -> None:
     master, slave = pty.openpty()
     process: subprocess.Popen[bytes] | None = None
@@ -529,7 +847,7 @@ def run_case(
         )
         if process.stdin is None:
             fail(name, "stdin pipe was not created", output, screen)
-        process.stdin.write(CANDIDATES)
+        process.stdin.write(candidates)
         process.stdin.close()
         process.stdin = None
 
@@ -616,6 +934,14 @@ def main() -> int:
     )
     run_case(
         binary,
+        "terminal editor control bindings",
+        [],
+        b"alpha\n",
+        0,
+        driver=drive_terminal_editor_bindings,
+    )
+    run_case(
+        binary,
         "select-1 accepts initial match",
         ["--select-1", "--query", "charlie"],
         b"charlie\n",
@@ -644,10 +970,123 @@ def main() -> int:
         0,
         driver=drive_multi_reverse_order,
     )
+    run_case(
+        binary,
+        "paste reranks once",
+        [],
+        b"bravo\n",
+        0,
+        driver=drive_paste_transaction,
+    )
+    run_case(
+        binary,
+        "no-match Enter stays open",
+        ["--query", "zzz"],
+        b"",
+        130,
+        driver=drive_no_match_enter_stays_open,
+    )
+    run_case(
+        binary,
+        "read0 selects embedded-newline candidate",
+        ["--read0", "--print0"],
+        b"a\nb\0",
+        0,
+        driver=drive_read0_accepts_control_candidate,
+        check_restoration=True,
+        candidates=b"a\nb\0ab\0",
+    )
+    run_case(
+        binary,
+        "read0 selects plain candidate independently",
+        ["--read0", "--print0"],
+        b"ab\0",
+        0,
+        driver=drive_read0_accepts_plain_candidate,
+        check_restoration=True,
+        candidates=b"a\nb\0ab\0",
+    )
+    run_case(
+        binary,
+        "C1 display is inert and selection preserves bytes",
+        ["--print0"],
+        b"a\xc2\x9bb\0",
+        0,
+        driver=drive_c1_candidate,
+        check_restoration=True,
+        candidates=b"a\xc2\x9bb\nplain\n",
+    )
+    run_case(
+        binary,
+        "C0 actual collision side preserves bytes",
+        ["--read0", "--print0"],
+        b"a\nb\0",
+        0,
+        driver=drive_injective_collision_pair,
+        check_restoration=True,
+        candidates=b"a\nb\0" + "a␊b".encode() + b"\0",
+    )
+    run_case(
+        binary,
+        "C0 literal collision side preserves bytes",
+        ["--read0", "--print0"],
+        "a␊b".encode() + b"\0",
+        0,
+        driver=drive_injective_collision_pair,
+        check_restoration=True,
+        candidates=b"a\nb\0" + "a␊b".encode() + b"\0",
+    )
+    run_case(
+        binary,
+        "C1 actual collision side preserves bytes",
+        ["--read0", "--print0"],
+        b"c\xc2\x9bd\0",
+        0,
+        driver=drive_injective_collision_pair,
+        check_restoration=True,
+        candidates=b"c\xc2\x9bd\0c\\u{009B}d\0",
+    )
+    run_case(
+        binary,
+        "C1 literal collision side preserves bytes",
+        ["--read0", "--print0"],
+        b"c\\u{009B}d\0",
+        0,
+        driver=drive_injective_collision_pair,
+        check_restoration=True,
+        candidates=b"c\xc2\x9bd\0c\\u{009B}d\0",
+    )
+    run_case(
+        binary,
+        "zh PTY phonetic",
+        ["--lang", "zh", "--query", "bjdx"],
+        "北京大学\n".encode(),
+        0,
+        driver=drive_language_match,
+        candidates="北京大学\nnotes\n".encode(),
+    )
+    run_case(
+        binary,
+        "ja PTY phonetic",
+        ["--lang", "ja", "--query", "kamera"],
+        "カメラ\n".encode(),
+        0,
+        driver=drive_language_match,
+        candidates="カメラ\n日本語\n".encode(),
+    )
+    run_case(
+        binary,
+        "ko PTY phonetic",
+        ["--lang", "ko", "--query", "hangeul"],
+        "한글\n".encode(),
+        0,
+        driver=drive_language_match,
+        candidates="한글\n한글\nnotes\n".encode(),
+    )
     print(
         "Interactive PTY tests passed "
-        "(accept, ESC, Ctrl-C, Ctrl-U, Ctrl-W, select-1, exit-0, multi, "
-        "source order)."
+        "(accept, abort, terminal editing, paste, no-match guidance, multi, "
+        "source order, injective control display, and explicit zh/ja/ko search)."
     )
     return 0
 

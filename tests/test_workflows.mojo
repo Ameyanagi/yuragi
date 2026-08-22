@@ -54,7 +54,7 @@ def test_doctor_report_is_exact_and_warnings_are_in_band() raises:
         ),
         (
             "Yuragi doctor\n"
-            "ok version: 0.0.0\n"
+            "ok version: 0.1.0\n"
             "ok executable: running\n"
             "info config path: /cfg/yuragi/config.toml\n"
             "info config file: absent; loading is not enabled in this release\n"

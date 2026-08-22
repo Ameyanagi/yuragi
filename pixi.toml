@@ -7,10 +7,11 @@ channels = [
 ]
 name = "yuragi"
 platforms = ["osx-arm64", "linux-64", "linux-aarch64"]
-version = "0.0.0"
+version = "0.1.0"
 
 [tasks]
-bench-fair = { cmd = "mojo run --Werror -I src benchmarks/bench_fair_compare.mojo", description = "Run the fair Yuru/Yuragi plain-search comparison protocol" }
+bench-cjk = { cmd = "mkdir -p .pixi/bin && mojo build --Werror -O3 -I src benchmarks/bench_cjk_search.mojo -o .pixi/bin/bench-cjk && .pixi/bin/bench-cjk", description = "Run the locked cjk-search-v1 profiling protocol" }
+bench-fair = { cmd = "mkdir -p .pixi/bin && mojo build --Werror -O3 -g1 -I src benchmarks/bench_fair_compare.mojo -o .pixi/bin/bench-fair && .pixi/bin/bench-fair", description = "Run the locked optimized Yuru/Yuragi plain-search comparison protocol" }
 bench-interactive-state = { cmd = "mojo run --Werror -I src benchmarks/bench_interactive_state.mojo", description = "Profile empty-query interactive state construction and copying" }
 bench-search = { cmd = "mojo run --Werror -I src benchmarks/bench_search.mojo", description = "Benchmark bounded interactive search orchestration" }
 build = { cmd = "mkdir -p .pixi/bin && mojo build --Werror -I src src/yuragi/main.mojo -o .pixi/bin/yuragi", description = "Build the Yuragi executable with warnings as errors" }
@@ -26,13 +27,10 @@ test-interactive = { cmd = "bash scripts/test-interactive.sh", depends-on = ["bu
 yuragi = { cmd = ".pixi/bin/yuragi", depends-on = ["build"], description = "Run the local Yuragi executable" }
 
 [dependencies]
-mojo-hibana = "*"
-mojo-mojotui = "*"
+jq = ">=1.7,<2"
 mojo = "==1.0.0"
+mojo-hibana = "==0.1.0"
+mojo-moji = "==0.1.0"
+mojo-mojotui = "==0.1.1"
+mojo-yomi = "==0.1.1"
 rattler-build = ">=0.74,<0.75"
-
-# Wave 3 packaging proof: hibana is consumed as an installed Conda package
-# from a local file:// channel built out of the sibling checkout. The local
-# channel only serves osx-arm64 today, so the dependency is scoped to the
-# platform it can resolve on; it moves to [dependencies] once hibana
-# publishes to a hosted channel for every supported platform.

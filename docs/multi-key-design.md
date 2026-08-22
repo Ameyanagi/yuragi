@@ -1,9 +1,8 @@
 # Multi-key ranking design
 
-This document specifies Yuragi's ranking policy for the multi-key search that
-will enter with Gate C. It records the parts of Yuru's earlier CJK search design
-that remain applicable to Yuragi. Those lessons take precedence over generic
-fzf conventions. This document does not describe current behavior.
+This document specifies Yuragi's implemented multi-key ranking policy. It
+records the parts of Yuru's earlier CJK search design that remain applicable to
+Yuragi. Those lessons take precedence over generic fzf conventions.
 
 ## Model
 
@@ -12,9 +11,9 @@ search keys. Each search key contains searchable text and a key kind. Hibana
 matches keys; Yuragi emits the candidate's display value at most once, using its
 best compatible key match.
 
-Today every candidate has exactly one key of kind `original`. This is the value
-already printed in the `KEY` field of `--explain`. Gate C may add normalized and
-language-specific phonetic keys without duplicating the visible candidate.
+`--lang auto` gives every candidate its direct base key only. Explicit `ja`,
+`zh`, and `ko` modes add bounded language-specific keys without duplicating the
+visible candidate. The winning kind is printed in `--explain`'s `KEY` field.
 
 ## Key kinds and weights
 
@@ -57,8 +56,8 @@ it is not treated as a match with score zero.
 
 The `--lang` hint controls which language-specific phonetic key kinds and
 corresponding query variant kinds are generated. It does not make unrelated
-kinds compatible. Yuragi continues to own the `--lang auto` policy described in
-`PLAN.md`; Yomi continues to provide language-specific representations.
+kinds compatible. Yuragi defines `auto` as direct-only; Yomi continues to
+provide language-specific representations without choosing a language.
 
 ## Hard caps
 
@@ -92,18 +91,15 @@ merged candidate results have one deterministic ordering:
 3. input index ascending.
 
 Step 2 falls out of the kind weights applied by step 1. It is an explicit
-invariant, not a separate direct-match special case. Input index ends the chain,
-exactly as source order ends the current single-key ordering documented by the
-`rank_candidates` docstring in `src/yuragi/ranking.mojo`. That docstring remains
-the current contract; this document is the contract that Gate C will extend it
-to implement.
+invariant, not a separate direct-match special case. Input index ends the chain
+so stable source order remains the final tie-break for both direct and
+phonetic matches.
 
-## `--explain` forward compatibility
+## `--explain`
 
 The line shape remains
-`RANK<TAB>SCORE<TAB>KEY<TAB>POSITIONS<TAB>TEXT`. `KEY` names the winning key kind,
-so future lines may contain the normalized or language-specific phonetic kind
-names introduced by Gate C.
+`RANK<TAB>SCORE<TAB>KEY<TAB>POSITIONS<TAB>TEXT`. `KEY` names the winning direct,
+normalized, or language-specific phonetic kind.
 
 `POSITIONS` always refers to zero-based Unicode scalar indices in the original
 display text, including when Hibana matched a generated phonetic key. Yomi owns
@@ -113,8 +109,10 @@ mapping, preserving the dependency boundary in `PLAN.md`.
 
 ## Non-goals
 
-- This milestone adds no implementation.
 - Yuragi contains no pinyin or romaji tables; those belong to Yomi.
+- `auto` does not detect language or silently enable every phonetic expansion.
+- General Japanese Kanji readings require a separately licensed
+  dictionary/provider and are not synthesized from incomplete rules.
 - Weights and caps are not CLI flags when introduced. Yuragi starts with
   sensible defaults and revisits configuration only in response to demand.
 - Multi-key search does not create an alternate matching or ranking pipeline.
