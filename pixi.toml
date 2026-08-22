@@ -10,6 +10,9 @@ platforms = ["osx-arm64", "linux-64", "linux-aarch64"]
 version = "0.0.0"
 
 [tasks]
+bench-fair = { cmd = "mojo run --Werror -I src benchmarks/bench_fair_compare.mojo", description = "Run the fair Yuru/Yuragi plain-search comparison protocol" }
+bench-interactive-state = { cmd = "mojo run --Werror -I src benchmarks/bench_interactive_state.mojo", description = "Profile empty-query interactive state construction and copying" }
+bench-search = { cmd = "mojo run --Werror -I src benchmarks/bench_search.mojo", description = "Benchmark bounded interactive search orchestration" }
 build = { cmd = "mkdir -p .pixi/bin && mojo build --Werror -I src src/yuragi/main.mojo -o .pixi/bin/yuragi", description = "Build the Yuragi executable with warnings as errors" }
 check = { depends-on = ["format-check", "test", "test-cli", "test-interactive"], description = "Run the complete validation suite" }
 example = { cmd = "mojo run --Werror -I src examples/basic.mojo", description = "Run the structural smoke example" }

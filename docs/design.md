@@ -21,10 +21,10 @@ contracts and sparse dependencies. Generated tables are acceptable when their
 sources, Unicode or data version, licenses, checksums, and deterministic update
 procedure are committed. Consumers must not need the generator toolchain.
 
-The first executable slice is useful for verifying process, framing, and I/O
-contracts but intentionally supports only empty-query identity selection.
-Rejecting a non-empty query is preferable to embedding a simplistic substring
-matcher that would conflict with Hibana or lose Yomi/Moji source mappings.
+The direct-text slice verifies process, framing, I/O, deterministic Hibana
+ranking, exact result cardinality, and interactive identity semantics. Phonetic
+matching is added only through Yomi/Moji representations; Yuragi does not embed
+temporary language tables or collapse generated matches to one bounding span.
 
 The CLI reads the complete stream before selection in the foundation release.
 This is the simplest deterministic ownership model. A bounded-memory streaming
@@ -36,6 +36,12 @@ explicit Chinese, Japanese, and Korean representations; it does not decide how
 mixed-script candidates are classified, ordered, or combined. That keeps
 `--lang auto` predictable at the CLI layer and leaves reusable language
 algorithms free of application defaults.
+
+Generated shell integration is output-only and byte-stable. It does not edit a
+profile or execute a finder while being generated. Runtime functions expose the
+small fixed workflow set and check external dependencies immediately before
+use, so installing a faster path finder does not require regenerating a script.
+The `YURAGI_BIN` environment variable is the only executable override.
 
 ## Out of scope
 

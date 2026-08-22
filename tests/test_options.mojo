@@ -8,7 +8,8 @@ from std.testing import (
     assert_true,
 )
 
-from yuragi.options import parse_options, usage, version_text
+from yuragi.options import CommandKind, parse_options, usage, version_text
+from yuragi.shell import ShellKind
 
 
 def _assert_rejected(var args: List[String]) raises:
@@ -83,6 +84,44 @@ def test_limit_equals_form() raises:
     var options = parse_options(args^)
     assert_true(options.has_limit)
     assert_equal(options.limit, 12)
+
+
+def test_exact_subcommand_shapes() raises:
+    var doctor_args: List[String] = ["yuragi", "doctor"]
+    assert_true(parse_options(doctor_args^).command == CommandKind.DOCTOR)
+
+    var bash_args: List[String] = ["yuragi", "shell", "bash"]
+    var bash = parse_options(bash_args^)
+    assert_true(bash.command == CommandKind.SHELL)
+    assert_true(bash.shell == ShellKind.BASH)
+
+    var zsh_args: List[String] = ["yuragi", "shell", "zsh"]
+    assert_true(parse_options(zsh_args^).shell == ShellKind.ZSH)
+    var fish_args: List[String] = ["yuragi", "shell", "fish"]
+    assert_true(parse_options(fish_args^).shell == ShellKind.FISH)
+    var powershell_args: List[String] = ["yuragi", "shell", "powershell"]
+    assert_true(parse_options(powershell_args^).shell == ShellKind.POWERSHELL)
+
+    var config_args: List[String] = ["yuragi", "config", "path"]
+    assert_true(parse_options(config_args^).command == CommandKind.CONFIG_PATH)
+
+
+def test_rejects_malformed_subcommands() raises:
+    var doctor_args: List[String] = ["yuragi", "doctor", "extra"]
+    with assert_raises(contains="doctor accepts no arguments; got: extra"):
+        _ = parse_options(doctor_args^)
+
+    var missing_shell_args: List[String] = ["yuragi", "shell"]
+    with assert_raises(contains="shell requires one of"):
+        _ = parse_options(missing_shell_args^)
+
+    var unknown_shell_args: List[String] = ["yuragi", "shell", "nu"]
+    with assert_raises(contains="unsupported shell: nu"):
+        _ = parse_options(unknown_shell_args^)
+
+    var config_args: List[String] = ["yuragi", "config", "show"]
+    with assert_raises(contains="unsupported config action: show"):
+        _ = parse_options(config_args^)
 
 
 def test_help_and_version_text() raises:

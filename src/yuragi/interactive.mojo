@@ -1,5 +1,6 @@
 """Inline MojoTUI application adapter for interactive candidate selection."""
 
+from hibana import CaseMode
 from mojotui import (
     Application,
     Buffer,
@@ -34,8 +35,9 @@ from std.io import FileDescriptor
 
 from yuragi.candidate import Candidate
 from yuragi.options import Options
-from yuragi.pipeline import rank_picker_query
+from yuragi.pipeline import initial_automation_indexed
 from yuragi.ranking import RankedCandidate
+from yuragi.search_index import SearchIndex
 
 
 comptime _VIEWPORT_HEIGHT = 12
@@ -57,10 +59,15 @@ struct FinderOutcome(Copyable, Equatable, ImplicitlyCopyable):
 
 
 struct _FinderModel(Copyable):
-    var candidates: MojoList[Candidate]
-    var options: Options
+    var index: SearchIndex
+    var identity_mode: Bool
+    var case_mode: CaseMode
+    var has_limit: Bool
+    var limit: Int
+    var multi: Bool
     var query: String
     var matches: MojoList[RankedCandidate]
+    var total_matches: Int
     var cursor: ListState
     var selected_source_index: Optional[Int]
     var marked_source_indices: MojoList[Int]
@@ -68,29 +75,57 @@ struct _FinderModel(Copyable):
 
     def __init__(
         out self,
-        var candidates: MojoList[Candidate],
+        var index: SearchIndex,
         options: Options,
         var matches: MojoList[RankedCandidate],
+        total_matches: Int,
     ):
-        self.options = options.copy()
+        self.case_mode = options.case_mode
+        self.has_limit = options.has_limit
+        self.limit = options.limit
+        self.multi = options.multi
         self.query = String(options.query)
+        self.index = index^
+        self.identity_mode = self.query == ""
         self.cursor = ListState()
         self.selected_source_index = None
         self.marked_source_indices = MojoList[Int]()
         self.outcome = FinderOutcome.ABORTED
-        if len(matches) > 0:
-            self.cursor.select(UInt(0), len(matches))
-            self.selected_source_index = matches[0].source_index
-        self.matches = matches^
-        self.candidates = candidates^
+        if self.identity_mode:
+            self.matches = MojoList[RankedCandidate]()
+            self.total_matches = len(self.index)
+            if len(self.index) > 0:
+                self.cursor.select(UInt(0), len(self.index))
+                self.selected_source_index = self.index.source_index_at(0)
+        else:
+            if len(matches) > 0:
+                self.cursor.select(UInt(0), len(matches))
+                self.selected_source_index = matches[0].source_index
+            self.matches = matches^
+            self.total_matches = total_matches
 
 
 def _match_count(model: _FinderModel) -> Int:
-    return len(model.matches)
+    return model.total_matches
 
 
 def _total_count(model: _FinderModel) -> Int:
-    return len(model.candidates)
+    return len(model.index)
+
+
+def _row_count(model: _FinderModel) -> Int:
+    """Return visible logical rows without materializing identity candidates."""
+    if not model.identity_mode:
+        return len(model.matches)
+    if model.has_limit:
+        return min(model.limit, len(model.index))
+    return len(model.index)
+
+
+def _row_source_index(model: _FinderModel, row: Int) -> Int:
+    if model.identity_mode:
+        return model.index.source_index_at(row)
+    return model.matches[row].source_index
 
 
 def _selected_id(model: _FinderModel) -> Optional[Int]:
@@ -128,15 +163,22 @@ def _toggled_mark_order(
 def _toggle_cursor_mark(mut model: _FinderModel):
     if not model.selected_source_index:
         return
+    var selected = model.selected_source_index.value()
+    if (
+        not _is_marked(model, selected)
+        and model.has_limit
+        and len(model.marked_source_indices) >= model.limit
+    ):
+        return
     model.marked_source_indices = _toggled_mark_order(
         model.marked_source_indices,
-        model.selected_source_index.value(),
+        selected,
     )
 
 
 def _accepted_source_indices(model: _FinderModel) -> MojoList[Int]:
     """Resolve accepted candidate IDs while retaining mark order internally."""
-    if model.options.multi and len(model.marked_source_indices) > 0:
+    if model.multi and len(model.marked_source_indices) > 0:
         return model.marked_source_indices.copy()
     var accepted = MojoList[Int]()
     if model.selected_source_index:
@@ -157,14 +199,9 @@ def _resolved_selection(model: _FinderModel) -> MojoList[Candidate]:
             if remaining[index] < remaining[earliest]:
                 earliest = index
         var accepted_id = remaining.pop(earliest)
-        for candidate_index in range(len(model.candidates)):
-            if model.candidates[candidate_index].source_index == accepted_id:
-                selected.append(
-                    Candidate(
-                        accepted_id,
-                        String(model.candidates[candidate_index].text),
-                    )
-                )
+        for candidate_index in range(len(model.index)):
+            if model.index.source_index_at(candidate_index) == accepted_id:
+                selected.append(model.index.copy_candidate_at(candidate_index))
                 break
     return selected^
 
@@ -184,7 +221,7 @@ def _adopt_cursor_id(mut model: _FinderModel):
         model.selected_source_index = None
         return
     var row = Int(model.cursor.selected.value())
-    model.selected_source_index = model.matches[row].source_index
+    model.selected_source_index = _row_source_index(model, row)
 
 
 def _rerank(mut model: _FinderModel) raises:
@@ -193,23 +230,35 @@ def _rerank(mut model: _FinderModel) raises:
         previous_row = Int(model.cursor.selected.value())
     var previous_id = model.selected_source_index.copy()
 
-    var matches = rank_picker_query(model.candidates, model.query, model.options)
-    model.matches = matches^
+    var k = model.limit if model.has_limit else len(model.index)
+    if model.query == "":
+        # One retained row is enough to update the index's complete identity
+        # match set; the model resolves all logical rows lazily from the index.
+        var page = model.index.search(model.query, model.case_mode, 1)
+        model.total_matches = page.total_matches
+        model.matches.clear()
+        model.identity_mode = True
+    else:
+        var page = model.index.search(model.query, model.case_mode, k)
+        model.total_matches = page.total_matches
+        model.matches = page^.take_rows()
+        model.identity_mode = False
 
-    if len(model.matches) == 0:
+    var row_count = _row_count(model)
+    if row_count == 0:
         model.cursor.select(None, 0)
         model.selected_source_index = None
         return
 
     if previous_id:
-        for row in range(len(model.matches)):
-            if model.matches[row].source_index == previous_id.value():
-                model.cursor.select(UInt(row), len(model.matches))
+        for row in range(row_count):
+            if _row_source_index(model, row) == previous_id.value():
+                model.cursor.select(UInt(row), row_count)
                 model.selected_source_index = previous_id.value()
                 return
 
-    var nearest_row = min(previous_row, len(model.matches) - 1)
-    model.cursor.select(UInt(nearest_row), len(model.matches))
+    var nearest_row = min(previous_row, row_count - 1)
+    model.cursor.select(UInt(nearest_row), row_count)
     _adopt_cursor_id(model)
 
 
@@ -230,21 +279,21 @@ def _handle_key(mut model: _FinderModel, key: KeyEvent) raises -> Bool:
         return True
     if (
         key.code == KeyEvent.TAB
-        and model.options.multi
+        and model.multi
         and (key.modifiers == KeyEvent.NO_MODIFIERS or key.modifiers == KeyEvent.SHIFT)
     ):
         _toggle_cursor_mark(model)
         if key.modifiers == KeyEvent.SHIFT:
-            model.cursor.previous(len(model.matches))
+            model.cursor.previous(_row_count(model))
         else:
-            model.cursor.next(len(model.matches))
+            model.cursor.next(_row_count(model))
         _adopt_cursor_id(model)
         return False
     if key.code == KeyEvent.DOWN or _control_character(key, "n"):
-        model.cursor.next(len(model.matches))
+        model.cursor.next(_row_count(model))
         _adopt_cursor_id(model)
     elif key.code == KeyEvent.UP or _control_character(key, "p"):
-        model.cursor.previous(len(model.matches))
+        model.cursor.previous(_row_count(model))
         _adopt_cursor_id(model)
     elif key.code == KeyEvent.BACKSPACE:
         _erase_last_grapheme(model.query)
@@ -262,18 +311,23 @@ def _item_line(model: _FinderModel, index: Int) raises -> Line:
         foreground=Color.indexed(6),
         add_modifiers=Style.BOLD,
     )
-    var line = Line.from_text(model.matches[index].text.copy())
+    var text = (
+        model.index.copy_candidate_at(index)
+        .text if model.identity_mode else model.matches[index]
+        .text.copy()
+    )
+    var line = Line.from_text(text.copy())
     if model.query != "":
         line = Line.highlighted(
-            model.matches[index].text.copy(),
+            text^,
             model.matches[index].positions,
             patch,
         )
-    if not model.options.multi:
+    if not model.multi:
         return line^
 
     var marker = String("  ")
-    if _is_marked(model, model.matches[index].source_index):
+    if _is_marked(model, _row_source_index(model, index)):
         marker = String("* ")
     var marked_line = Line.from_text(marker^)
     for span_index in range(len(line.spans)):
@@ -281,34 +335,54 @@ def _item_line(model: _FinderModel, index: Int) raises -> Line:
     return marked_line^
 
 
-def _items(model: _FinderModel) raises -> MojoList[ListItem]:
-    var items = MojoList[ListItem](capacity=len(model.matches))
-    for index in range(len(model.matches)):
+def _visible_window(model: _FinderModel, height: Int) -> Tuple[Int, Int]:
+    """Return a deterministic half-open row window around the cursor."""
+    var row_count = _row_count(model)
+    if height <= 0 or row_count == 0:
+        return (0, 0)
+    var count = min(height, row_count)
+    var selected = 0
+    if model.cursor.selected:
+        selected = Int(model.cursor.selected.value())
+    var start = max(0, selected - count // 2)
+    start = min(start, row_count - count)
+    return (start, start + count)
+
+
+def _items(
+    model: _FinderModel, start: Int = 0, end: Int = -1
+) raises -> MojoList[ListItem]:
+    """Materialize only the requested visible half-open result window."""
+    var row_count = _row_count(model)
+    var bounded_end = row_count if end < 0 else min(end, row_count)
+    var bounded_start = min(max(start, 0), bounded_end)
+    var items = MojoList[ListItem](capacity=bounded_end - bounded_start)
+    for index in range(bounded_start, bounded_end):
         items.append(ListItem.from_line(_item_line(model, index)))
     return items^
 
 
 def _counter_text(model: _FinderModel) -> String:
     var counter = String(_match_count(model)) + "/" + String(_total_count(model))
-    if model.options.multi:
+    if model.multi:
         counter += " ("
         counter += String(_marked_count(model))
         counter += ")"
     return counter^
 
 
-struct _FinderApplication(Application, Copyable):
+struct _FinderApplication(Application):
     comptime Model = _FinderModel
     comptime Message = KeyEvent
     comptime Effect = Bool
 
-    var initial_model: _FinderModel
+    var initial_model: Optional[_FinderModel]
 
     def __init__(out self, initial_model: _FinderModel):
         self.initial_model = initial_model.copy()
 
     def init(mut self) raises -> InitResult[Self.Model, Self.Effect]:
-        return InitResult[Self.Model, Self.Effect].ready(self.initial_model.copy())
+        return InitResult[Self.Model, Self.Effect].ready(self.initial_model.take())
 
     def update(
         mut self, mut model: Self.Model, var key: Self.Message
@@ -333,8 +407,14 @@ struct _FinderApplication(Application, Copyable):
             regions[1],
             buffer,
         )
-        var cursor = model.cursor.copy()
-        List(_items(model)).render(regions[2], buffer, cursor)
+        var window = _visible_window(model, regions[2].height)
+        var cursor = ListState()
+        if model.cursor.selected and window[1] > window[0]:
+            cursor.select(
+                UInt(Int(model.cursor.selected.value()) - window[0]),
+                window[1] - window[0],
+            )
+        List(_items(model, window[0], window[1])).render(regions[2], buffer, cursor)
 
     def on_input(
         self, model: Self.Model, var event: InputEvent
@@ -427,18 +507,21 @@ struct FinderSession:
         out self, var candidates: MojoList[Candidate], options: Options
     ) raises:
         """Create an interactive session over owned candidates."""
-        var seeded_query = String(options.query)
-        var matches = rank_picker_query(candidates, seeded_query, options)
-        self._model = _FinderModel(candidates^, options, matches^)
+        var index = SearchIndex(candidates^)
+        var initial = initial_automation_indexed(index, options)
+        var total_matches = initial.total_matches
+        var matches = initial^.take_matches()
+        self._model = _FinderModel(index^, options, matches^, total_matches)
 
     def __init__(
         out self,
-        var candidates: MojoList[Candidate],
+        var index: SearchIndex,
         options: Options,
         var initial_matches: MojoList[RankedCandidate],
+        total_matches: Int,
     ):
         """Create a session from the pure pre-TUI initial ranking."""
-        self._model = _FinderModel(candidates^, options, initial_matches^)
+        self._model = _FinderModel(index^, options, initial_matches^, total_matches)
 
     def run(mut self) raises -> FinderOutcome:
         """Run the inline picker on the controlling terminal."""
