@@ -213,13 +213,15 @@ Marks follow candidate source identities, so they survive query refinement
 even while a marked candidate is absent from the current matches. TAB and
 Shift-TAB are inert without `--multi`.
 
-For terminal safety, the interactive list displays C0 controls and DEL as
-Unicode control pictures, and C1 controls as fixed inert ASCII escapes such as
-`\u{009B}`. A highlight on one C1 source scalar spans its complete visible
-escape. These substitutions affect display cells only: Yuragi retains the
-original candidate record and emits its original valid UTF-8 bytes and
-requested record framing when selected. Invalid UTF-8 retains the documented
-lossy-decoding behavior.
+For terminal safety and unambiguous rows, the interactive list uses an
+injective display grammar. Every C0, DEL, or C1 scalar becomes a fixed uppercase
+eight-ASCII-scalar escape such as `\u{000A}` or `\u{009B}`; every literal
+backslash becomes `\\`; all other scalars remain unchanged. A highlight on one
+escaped source scalar spans its complete eight- or two-scalar display form.
+These substitutions affect display cells only: Yuragi retains the original
+candidate record and emits its original valid UTF-8 bytes and requested record
+framing when selected. Invalid UTF-8 retains the documented lossy-decoding
+behavior.
 
 An empty prompt is a lazy identity view: it preserves the exact full count and
 source order but materializes only the rows visible in the terminal. This keeps

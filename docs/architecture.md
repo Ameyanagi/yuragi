@@ -47,14 +47,16 @@ that model for the run; the session extracts only the outcome and accepted
 records afterward. No `FinderModel`, `SearchIndex`, prepared key corpus, or
 candidate corpus is copied across this boundary.
 
-Interactive candidate rendering is also a display-only boundary. C0 controls
-and DEL become their one-scalar Unicode control pictures; C1 controls become
-fixed inert ASCII escapes such as `\u{009B}`. Source-scalar highlight positions
-are projected so one matched C1 scalar highlights its complete expanded escape.
-A candidate therefore cannot invisibly move the cursor or inject terminal
-control behavior. The stored candidate record is not rewritten: accepting it
-emits its original valid UTF-8 record and requested framing unchanged. Invalid
-UTF-8 continues to follow the documented lossy-decoding contract.
+Interactive candidate rendering is also a display-only, injective boundary.
+Every C0, DEL, or C1 scalar becomes a fixed uppercase eight-ASCII-scalar escape
+such as `\u{000A}` or `\u{009B}`; every literal backslash becomes `\\`; all
+other scalars remain unchanged. Source-scalar highlight positions are projected
+so a matched control or backslash highlights its complete eight- or two-scalar
+display form. Distinct source records therefore stay visibly distinct, and a
+candidate cannot invisibly move the cursor or inject terminal control behavior.
+The stored candidate record is not rewritten: accepting it emits its original
+valid UTF-8 record and requested framing unchanged. Invalid UTF-8 continues to
+follow the documented lossy-decoding contract.
 
 ## Search state and ranking contracts
 
