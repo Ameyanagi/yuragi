@@ -119,15 +119,14 @@ def append_candidate_keys(
     """Append one candidate's bounded key family in deterministic order."""
     language.validate()
     if language == LanguageMode.AUTO:
-        var representation = _identity_representation(text)
-        _append_representation(
-            candidate_index,
-            SearchKeyKind.ORIGINAL,
-            0,
-            0,
-            representation^,
-            corpus,
-            keys,
+        corpus.append(text)
+        keys.append(
+            IndexedPhoneticKey(
+                candidate_index,
+                SearchKeyKind.ORIGINAL,
+                0,
+                0,
+            )
         )
     elif language == LanguageMode.JA:
         var bundle = japanese_candidate_keys(text)

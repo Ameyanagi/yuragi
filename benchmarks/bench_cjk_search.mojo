@@ -5,6 +5,7 @@ from std.benchmark import keep
 from std.collections import List
 from std.runtime.asyncrt import parallelism_level
 from std.time import perf_counter_ns
+from yomi import SearchKeyKind
 
 from yuragi.candidate import Candidate
 from yuragi.language import LanguageMode
@@ -74,6 +75,70 @@ def _expected_bytes(corpus: StringSlice, count: Int) -> Int:
     if corpus == "ja":
         return 90_000 if count == 10_000 else 900_000
     return 60_000 if count == 10_000 else 600_000
+
+
+def _expected_preparation_checksum(name: StringSlice, count: Int) raises -> Int:
+    """Return the locked cjk-search-v1 preparation checksum."""
+    if count == 10_000:
+        if name == "direct":
+            return 10_001_447_851
+        if name == "auto-negative":
+            return 10_001_093_000
+        if name == "zh":
+            return 10_004_391_000
+        if name == "ja":
+            return 10_004_000_000
+        if name == "ko":
+            return 10_004_940_000
+    elif count == 100_000:
+        if name == "direct":
+            return 100_014_578_580
+        if name == "auto-negative":
+            return 100_010_930_000
+        if name == "zh":
+            return 100_043_910_000
+        if name == "ja":
+            return 100_040_000_000
+        if name == "ko":
+            return 100_049_400_000
+    raise Error("unsupported cjk-search-v1 preparation case")
+
+
+def _expected_result_checksum(name: StringSlice, count: Int) raises -> Int:
+    """Return the locked cjk-search-v1 ranked-result checksum."""
+    if name == "auto-negative":
+        return 0
+    if count == 10_000:
+        if name == "direct":
+            return 10_000_388_532
+        if name == "zh":
+            return 1_000_690_530
+        if name == "ja":
+            return 1_000_732_890
+        if name == "ko":
+            return 1_000_765_980
+    elif count == 100_000:
+        if name == "direct":
+            return 100_000_658_532
+        if name == "zh":
+            return 10_000_717_530
+        if name == "ja":
+            return 10_000_759_890
+        if name == "ko":
+            return 10_000_792_980
+    raise Error("unsupported cjk-search-v1 result case")
+
+
+def _expected_winning_key_kind(name: StringSlice) raises -> SearchKeyKind:
+    if name == "direct":
+        return SearchKeyKind.ORIGINAL
+    if name == "zh":
+        return SearchKeyKind.CHINESE_PINYIN_FULL
+    if name == "ja":
+        return SearchKeyKind.JAPANESE_ROMAJI
+    if name == "ko":
+        return SearchKeyKind.KOREAN_ROMANIZED
+    raise Error("cjk-search-v1 case has no retained winning key kind")
 
 
 def _sort_timings(mut values: List[Int]):
@@ -152,6 +217,13 @@ def _validate_page(benchmark_case: _Case, count: Int, page: SearchPage) raises:
                 ", got ",
                 page.rows[index].source_index,
             )
+        if benchmark_case.name != "auto-negative":
+            var expected_kind = _expected_winning_key_kind(benchmark_case.name)
+            if page.rows[index].key_kind != expected_kind:
+                raise Error(
+                    "cjk-search-v1 winning key kind changed at row ",
+                    index,
+                )
 
 
 def _prepare_sample(benchmark_case: _Case, count: Int) raises -> Int:
@@ -186,6 +258,10 @@ def _run_case(benchmark_case: _Case, count: Int) raises:
     var preparation_checksum = (
         len(index) * 1_000_003 + index.prepared_key_count() * 97 + bytes
     )
+    if preparation_checksum != _expected_preparation_checksum(
+        benchmark_case.name, count
+    ):
+        raise Error("cjk-search-v1 preparation checksum changed")
 
     var last_page = SearchPage()
     for _ in range(_WARMUPS):
@@ -205,6 +281,9 @@ def _run_case(benchmark_case: _Case, count: Int) raises:
         keep(_result_checksum(last_page))
         search_timings.append(elapsed)
     _sort_timings(search_timings)
+    var result_checksum = _result_checksum(last_page)
+    if result_checksum != _expected_result_checksum(benchmark_case.name, count):
+        raise Error("cjk-search-v1 result checksum changed")
     var coarse_parallel = (
         benchmark_case.language == LanguageMode.AUTO and count >= 4_096
     )
@@ -235,7 +314,7 @@ def _run_case(benchmark_case: _Case, count: Int) raises:
         " preparation_checksum=",
         preparation_checksum,
         " result_checksum=",
-        _result_checksum(last_page),
+        result_checksum,
         " exact_matches=",
         last_page.total_matches,
         " retained_indices=",

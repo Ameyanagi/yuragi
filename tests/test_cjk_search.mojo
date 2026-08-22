@@ -2,7 +2,13 @@
 
 from hibana import CaseMode
 from std.collections import List
-from std.testing import TestSuite, assert_equal, assert_false, assert_true
+from std.testing import (
+    TestSuite,
+    assert_equal,
+    assert_false,
+    assert_raises,
+    assert_true,
+)
 from yomi import SearchKeyKind
 
 from yuragi.candidate import candidates_from_text
@@ -129,6 +135,28 @@ def test_auto_is_direct_only_and_explicit_modes_do_not_incrementally_prune() rai
     _ = zh.search("bj", limit=5)
     assert_false(zh.last_search_was_incremental())
     assert_equal(zh.last_scanned_count(), 3)
+
+
+def test_auto_prepares_one_direct_key_and_reconstructs_only_finalists() raises:
+    var candidates = candidates_from_text("a界b\nalpha\nother\n")
+    var index = SearchIndex(candidates^, LanguageMode.AUTO)
+    assert_equal(index.prepared_key_count(), 3)
+
+    var page = index.search("ab", limit=3)
+    assert_equal(page.total_matches, 1)
+    assert_equal(len(page.rows), 1)
+    assert_equal(page.rows[0].text, "a界b")
+    assert_true(page.rows[0].key_kind == SearchKeyKind.ORIGINAL)
+    _assert_positions(page.rows[0].positions, [0, 2], "direct identity")
+    assert_equal(index.last_scanned_count(), 3)
+    assert_equal(index.last_scored_pair_count(), 3)
+    assert_equal(index.last_position_reconstruction_count(), 1)
+
+
+def test_search_index_rejects_forged_language_mode() raises:
+    var candidates = candidates_from_text("alpha\n")
+    with assert_raises(contains="unsupported Yuragi language mode"):
+        _ = SearchIndex(candidates^, LanguageMode(_value=99))
 
 
 def test_smart_ascii_uppercase_is_not_bypassed_by_normalized_query() raises:
