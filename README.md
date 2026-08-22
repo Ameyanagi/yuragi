@@ -11,10 +11,12 @@ than exporting foundation algorithms.
 
 The current implementation accepts candidates on standard input and provides
 both an inline interactive picker and deterministic noninteractive `--filter`
-output. One prepared `SearchIndex` serves both workflows. Explicit `ja`, `zh`,
-and `ko` modes add bounded Yomi phonetic keys and map generated-key matches back
-to the original candidate. `auto` deliberately means direct-text search only;
-it does not guess a language from mixed Unicode input.
+output. Internally, both workflows construct one prepared `SearchIndex` and
+call its one search method. This is an application implementation detail, not
+an installed Mojo library API. Explicit `ja`, `zh`, and `ko` modes add bounded
+Yomi phonetic keys and map generated-key matches back to the original
+candidate. `auto` deliberately means direct-text search only; it does not guess
+a language from mixed Unicode input.
 The project is independently installable and does not require any application
 from the wider ecosystem.
 
@@ -67,9 +69,9 @@ banana
 bar
 ```
 
-Yuragi intentionally exposes one application executable rather than a public
-Mojo library API. Hibana, Moji, Yomi, and MojoTUI provide the reusable
-foundation APIs.
+Yuragi `0.1.0` installs and supports one application executable, not a Mojo
+library package. Its `SearchIndex` and other modules remain internal. Hibana,
+Moji, Yomi, and MojoTUI provide the reusable foundation APIs.
 
 Mojo programs integrate with Yuragi through ordinary UTF-8 records, so no
 application-specific API is required:
@@ -86,9 +88,8 @@ the original `北京大学` record.
 ## Application package
 
 Yuragi installs an executable named `yuragi`. Its internal Mojo modules live
-under `src/yuragi/`; they are application implementation details rather than a
-separately supported library API. The Conda distribution is also named
-`yuragi`.
+under `src/yuragi/`; the distribution does not install or support them as an
+importable Mojo package. The Conda distribution is also named `yuragi`.
 
 The executable implements validated options, buffered UTF-8 stdin ingestion,
 stable candidate framing, deterministic stdout, and an inline interactive
@@ -190,19 +191,31 @@ with `--filter`.
 
 | Keys | Action |
 | --- | --- |
-| Enter | Accept marks, or the cursor candidate when no marks exist |
+| Enter | Accept marks, or the cursor candidate; with no match, stay open |
 | Esc, Ctrl-C | Abort |
 | Down, Ctrl-N | Move to the next candidate |
 | Up, Ctrl-P | Move to the previous candidate |
 | TAB | With `--multi`, toggle the cursor mark and move down |
 | Shift-TAB | With `--multi`, toggle the cursor mark and move up |
-| Backspace | Erase the last query grapheme |
+| Left/Right, Ctrl-B/Ctrl-F | Move the query cursor by grapheme |
+| Home/End, Ctrl-A/Ctrl-E | Move to the start/end of the query |
+| Backspace, Ctrl-H | Delete the previous grapheme or selection |
+| Delete, Ctrl-D | Delete the next grapheme or selection |
+| Ctrl-K | Delete from the cursor to the end of the query |
 | Ctrl-U | Clear the query |
-| Ctrl-W | Delete the trailing word from the query |
+| Ctrl-W | Delete the previous Unicode word |
+| Ctrl-Z/Ctrl-Y | Undo/redo a query edit |
+| Bracketed paste | Insert the complete paste as one undoable transaction |
 
 Marks follow candidate source identities, so they survive query refinement
 even while a marked candidate is absent from the current matches. TAB and
 Shift-TAB are inert without `--multi`.
+
+For terminal safety, the interactive list displays C0 controls and DEL as
+visible Unicode control pictures. This substitution affects display cells
+only: Yuragi retains the original candidate record and emits its original valid
+UTF-8 bytes and requested record framing when selected. Invalid UTF-8 retains
+the documented lossy-decoding behavior.
 
 An empty prompt is a lazy identity view: it preserves the exact full count and
 source order but materializes only the rows visible in the terminal. This keeps

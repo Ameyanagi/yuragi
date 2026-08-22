@@ -70,9 +70,15 @@ plain-search workload must not regress by more than 5% against the recorded
 pre-change median. These are release engineering thresholds on one reference
 host, not portable latency promises.
 
-No CJK latency number is publishable until a checked-in harness implements this
-generator and is reachable through a locked Pixi task. Record the harness task
-name here when it lands.
+The checked-in optimized harness implements this generator and is built and run
+through the locked task:
+
+```sh
+pixi run --locked bench-cjk
+```
+
+Only numbers emitted by that task for a recorded exact commit are publishable
+as `cjk-search-v1` evidence.
 
 ## Profiling
 
@@ -87,7 +93,7 @@ Attribute time separately to:
 2. compatible score-only scans;
 3. bounded top-K maintenance;
 4. finalist position reconstruction and source projection;
-5. interactive model construction/copying.
+5. interactive model construction and ownership transfer.
 
 Optimize measured ownership, storage, and allocation costs first. Hibana's
 fuzzy dynamic program has loop-carried state and divergent Unicode exits, and a

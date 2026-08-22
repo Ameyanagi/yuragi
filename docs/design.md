@@ -4,7 +4,7 @@
 
 - Mojo is the runtime implementation language.
 - Prefer pure Mojo and safe standard-library APIs.
-- Keep the root API small, typed, documented, and testable.
+- Keep internal module boundaries small, typed, documented, and testable.
 - Separate semantic contracts from optimized CPU, SIMD, GPU, terminal, or
   rendering backends.
 - Establish correctness and reference fixtures before optimization.

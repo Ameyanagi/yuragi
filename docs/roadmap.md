@@ -15,8 +15,11 @@
 
 Direct and explicit-language filtering, the interactive picker, exact
 incremental match-set reuse where semantically safe, and source-mapped typed
-multi-key APIs are implemented. Japanese Kanji dictionary lookup remains an
-explicit provider boundary; see `PLAN.md`.
+multi-key orchestration are implemented. Internally, both product workflows use
+one construct-then-search `SearchIndex` pattern. The `0.1.0` distribution
+installs only the executable; the internal modules are not a supported Mojo
+library package. Japanese Kanji dictionary lookup remains an explicit provider
+boundary; see `PLAN.md`.
 
 ## v0.2 — Usability
 
@@ -47,5 +50,5 @@ explicit provider boundary; see `PLAN.md`.
 ## Not planned
 
 Reusable fuzzy algorithms, Unicode primitives, phonetic tables, terminal
-widgets, a public library API, filesystem indexing, and a GUI toolkit belong in
-their owning projects or later applications.
+widgets, an installed Yuragi library package, filesystem indexing, and a GUI
+toolkit belong in their owning projects or later applications.

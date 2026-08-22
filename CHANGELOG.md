@@ -29,8 +29,9 @@ This is Yuragi's first source-tagged and three-platform packaged release.
 - Unit and executable CLI contract tests for the first application slice.
 - Defined CRLF framing and help/version/invalid-option precedence at the
   executable boundary.
-- Distinguished usage/unsupported-mode exit status 2 from operational/input
-  exit status 1, and made executable framing/package tests byte-exact.
+- Distinguished no-match exit status 1 from usage, unsupported-mode,
+  operational, and input failures at exit status 2, and made executable
+  framing/package tests byte-exact.
 - Made `--lang auto` an application-owned policy and tightened Moji/Yomi
   dependency gates around search coordinates and discontiguous source ranges.
 - Added deterministic controlled-chunk and byte-exact executable fixtures for

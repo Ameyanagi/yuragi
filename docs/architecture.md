@@ -40,20 +40,31 @@ cursor identity follows the source candidate across query changes.
 
 The empty interactive query is represented as a lazy identity view. Its exact
 cardinality and cursor IDs come directly from the owned `SearchIndex`; only the
-visible viewport is copied into MojoTUI `ListItem` values. The host receives a
-model copy because its fallible terminal constructor cannot transactionally
-return a moved model on failure; lazy identity rows keep that copy from
-duplicating one ranked row per candidate.
+visible viewport is materialized into MojoTUI `ListItem` values. Before the
+terminal host is constructed, `FinderSession` swaps its live movable model with
+an empty placeholder and moves the live model into the host. The host then owns
+that model for the run; the session extracts only the outcome and accepted
+records afterward. No `FinderModel`, `SearchIndex`, prepared key corpus, or
+candidate corpus is copied across this boundary.
+
+Interactive candidate rendering is also a display-only boundary. C0 controls
+and DEL are rendered as their Unicode control-picture symbols so a candidate
+cannot invisibly move the cursor or inject terminal control behavior. The
+stored candidate record is not rewritten: accepting it emits its original
+valid UTF-8 record and requested framing unchanged. Invalid UTF-8 continues to
+follow the documented lossy-decoding contract.
 
 ## Search state and ranking contracts
 
-The interactive path owns a `SearchIndex` whose public surface is deliberately
-small:
+The executable's internal orchestration deliberately uses one call pattern:
 
 ```mojo
-var index = SearchIndex(candidates^)
+var index = SearchIndex(candidates^, language)
 var page = index.search(query, case_mode, k)
 ```
+
+This is an internal implementation seam shared by filtering and the picker,
+not an installed or supported Mojo library API.
 
 The index retains the complete exact match-ID set from the previous query. An
 identical query or a scalar-safe query extension with the same case mode scans
@@ -67,7 +78,7 @@ before truncation, and ties retain source order.
 The index prepares candidate representations once, uses Hibana's score-only
 path while scanning, and reconstructs positions only for final retained rows.
 Each visible candidate contributes only its best compatible key. This keeps
-the public application surface small while avoiding per-query phonetic
+the internal orchestration singular while avoiding per-query phonetic
 generation and match-position allocation across the whole corpus.
 
 The fuzzy scan itself has loop-carried pattern state and divergent Unicode
@@ -103,9 +114,10 @@ compatibility contract.
 dependency is added. Dependencies must be pinned installable packages; release
 builds do not reach into sibling source checkouts.
 
-Yuragi does not export a supported library surface. Its modules remain
-application-internal; reusable algorithms, generated tables, platform details,
-and backend implementations stay in their owning libraries. Generic
+Yuragi `0.1.0` installs only its executable. Its modules, including
+`SearchIndex`, remain application-internal and are not installed or supported
+as a Mojo library package. Reusable algorithms, generated tables, platform
+details, and backend implementations stay in their owning libraries. Generic
 Mojo-native buffers, spans, strings, and collections are preferred over an
 ecosystem-specific universal container.
 

@@ -27,8 +27,11 @@ stderr. Equal-score results preserve source order.
   or ambiguous flags.
 - Read standard input in bounded chunks, preserve candidate text and source
   order, and render deterministic newline- or NUL-framed output.
-- Own one prepared `SearchIndex` for filter and interactive workflows. Direct
-  and explicit-language keys are prepared once per candidate.
+- Own one internal prepared `SearchIndex` for filter and interactive workflows.
+  Internal orchestration follows one pattern: construct the index, then call
+  `index.search(query, case_mode, limit)`. Direct and explicit-language keys are
+  prepared once per candidate. The executable package does not install or
+  support this implementation as a Mojo library API.
 - Scan through Hibana's score-only path, retain bounded top-K candidate/key
   identities, and reconstruct source positions only for final rows.
 - Generate bounded, typed Yomi keys in explicit `ja`, `zh`, and `ko` modes.
@@ -95,5 +98,6 @@ See `benchmarks/README.md`, `benchmarks/fair-search-protocol.md`, and
 - fuzzy score algorithms or generic SIMD kernels
 - pinyin, kana, Hangul, or keyboard conversion tables
 - terminal rendering, layout, and widgets
-- a reusable public library API for application-internal orchestration
+- an installed or supported Mojo library package for Yuragi's internal
+  orchestration
 - heuristic `auto` language detection presented as complete CJK support

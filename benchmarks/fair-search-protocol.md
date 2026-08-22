@@ -77,8 +77,10 @@ and extending to `component100` is 2.21x faster than the same-query full scan.
 Preparation is intentionally separate. Yuru's index-build central estimates
 were 1.579 ms at 10k and 3.466 ms at 100k after an untimed corpus clone. Yuragi
 candidate materialization p50/p95 was 0.899/0.963 ms and 8.376/8.891 ms;
-`SearchIndex` currently only takes ownership. These rows measure different work
-and are not a valid speed ratio.
+the historical `SearchIndex` measured here only took ownership. The `0.1.0`
+index instead prepares and owns its Hibana corpus plus a bounded key family for
+each candidate. These rows measure different work and are not a valid speed
+ratio for either the historical implementations or the current release.
 
 ## Limits
 
@@ -87,7 +89,9 @@ and are not a valid speed ratio.
 - Both scan their selected candidate set and retain top 20. Yuragi also computes
   exact pre-limit cardinality and match positions; Yuru does not expose total
   match cardinality through this API.
-- Yuru is parallel at 100k by default; Yuragi is currently single-threaded.
+- Yuru is parallel at 100k by default. Current Yuragi large `AUTO` full searches
+  use Hibana's exact coarse parallel shards; explicit CJK modes remain serial.
+  The historical Yuragi values above predate that parallel path.
 - No portable retained-heap value is reported. RSS combines runtime, allocator
   high-water marks, corpus, and index memory. Common allocation instrumentation
   is required before publishing a memory ratio.
