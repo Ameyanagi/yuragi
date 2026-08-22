@@ -328,6 +328,11 @@ struct SearchIndex(Sized):
             self._remember_query(query, case_mode)
             return SearchPage()
 
+        # A public limit is a page bound, not permission to reserve that many
+        # rows. No search can retain more rows than candidates, so clamp every
+        # internal heap/capacity before allocation while preserving the caller's
+        # validated positive value and exact untruncated match count.
+        var effective_limit = min(limit, len(self._candidates))
         var query_keys = prepare_query_keys(self._language, query, case_mode)
         var incremental = self._can_refine(query, case_mode) and not (
             self._previous_was_identity
@@ -337,9 +342,11 @@ struct SearchIndex(Sized):
             and self._language == LanguageMode.AUTO
             and len(self._candidates) >= 4_096
         ):
-            return self._parallel_auto_search(query, case_mode, limit, query_keys)
+            return self._parallel_auto_search(
+                query, case_mode, effective_limit, query_keys
+            )
         var workspace = MatchWorkspace()
-        var top_k = TopK(limit)
+        var top_k = TopK(effective_limit)
         self._next_matching_indices.clear()
         self._last_scanned_count = 0
         self._last_scored_pair_count = 0
