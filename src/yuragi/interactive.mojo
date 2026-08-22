@@ -481,8 +481,16 @@ def _handle_key(mut model: _FinderModel, key: KeyEvent) raises -> Bool:
     return False
 
 
-def _c1_escape(value: Int) -> String:
-    """Return one visible, inert, fixed-width escape for a C1 scalar."""
+def _is_terminal_control(value: Int) -> Bool:
+    return (
+        (value >= 0 and value <= 0x1F)
+        or value == 0x7F
+        or (value >= 0x80 and value <= 0x9F)
+    )
+
+
+def _control_escape(value: Int) -> String:
+    """Return one visible, inert, fixed-width escape for a control scalar."""
     var escape = String("\\")
     escape += "u{"
     for shift in range(12, -1, -4):
@@ -492,31 +500,38 @@ def _c1_escape(value: Int) -> String:
     return escape^
 
 
+def _display_scalar_length(value: Int) -> Int:
+    if _is_terminal_control(value):
+        return 8
+    if value == 0x5C:
+        return 2
+    return 1
+
+
 def _display_text(text: StringSlice) -> String:
-    """Render terminal controls inertly without changing source text."""
+    """Encode candidate scalars with an injective terminal-safe grammar."""
     var display = String()
     for scalar in text.codepoints():
         var value = Int(scalar.to_u32())
-        if value >= 0 and value <= 0x1F:
-            display += chr(0x2400 + value)
-        elif value == 0x7F:
-            display += chr(0x2421)
-        elif value >= 0x80 and value <= 0x9F:
-            display += _c1_escape(value)
+        if _is_terminal_control(value):
+            display += _control_escape(value)
+        elif value == 0x5C:
+            display += "\\"
+            display += "\\"
         else:
             display.append(scalar)
     return display^
 
 
 def _display_positions(text: StringSlice, positions: StdSpan[Int, _]) -> MojoList[Int]:
-    """Project source-scalar highlights across expanded C1 escapes."""
+    """Project source-scalar highlights across every display expansion."""
     var projected = MojoList[Int]()
     var source_index = 0
     var position_index = 0
     var display_index = 0
     for scalar in text.codepoints():
         var value = Int(scalar.to_u32())
-        var display_length = 8 if value >= 0x80 and value <= 0x9F else 1
+        var display_length = _display_scalar_length(value)
         if (
             position_index < len(positions)
             and positions[position_index] == source_index

@@ -357,7 +357,7 @@ def test_multi_render_shows_marker_and_marked_count() raises:
     )
 
 
-def test_candidate_display_replaces_terminal_controls_one_for_one() raises:
+def test_candidate_display_uses_fixed_escapes_for_terminal_controls() raises:
     var source = String(
         "a",
         chr(0),
@@ -369,9 +369,24 @@ def test_candidate_display_replaces_terminal_controls_one_for_one() raises:
         "界🙂b",
     )
     var display = _display_text(source)
-    assert_equal(display, "a␀␉␊␍␛␡界🙂b")
-    assert_equal(display.count_codepoints(), source.count_codepoints())
-    assert_equal(text_width(display), 12)
+    var expected = String(
+        "a",
+        "\\",
+        "u{0000}",
+        "\\",
+        "u{0009}",
+        "\\",
+        "u{000A}",
+        "\\",
+        "u{000D}",
+        "\\",
+        "u{001B}",
+        "\\",
+        "u{007F}",
+        "界🙂b",
+    )
+    assert_equal(display, expected)
+    assert_equal(text_width(display), 54)
 
 
 def test_candidate_display_escapes_c1_and_projects_highlights() raises:
@@ -418,13 +433,43 @@ def test_candidate_display_escapes_c1_and_projects_highlights() raises:
     )
 
 
+def test_candidate_display_grammar_is_injective_for_collision_pairs() raises:
+    var actual_lf = _display_text(String("a\nb"))
+    var literal_control_picture = _display_text(String("a␊b"))
+    assert_equal(actual_lf, String("a", "\\", "u{000A}b"))
+    assert_equal(literal_control_picture, "a␊b")
+    assert_true(actual_lf != literal_control_picture)
+
+    var actual_c1 = _display_text(String("c", chr(0x9B), "d"))
+    var literal_escape = _display_text(String("c", "\\", "u{009B}d"))
+    assert_equal(actual_c1, String("c", "\\", "u{009B}d"))
+    assert_equal(literal_escape, String("c", "\\", "\\", "u{009B}d"))
+    assert_true(actual_c1 != literal_escape)
+
+
+def test_candidate_display_projects_literal_backslash_highlight() raises:
+    var candidates: List[Candidate] = [
+        Candidate(0, String("a", "\\", "b")),
+    ]
+    var model = _seeded_model(candidates^, String("\\"))
+    var line = _item_line(model, 0)
+    assert_equal(len(line.spans), 3)
+    assert_equal(line.spans[0].content, "a")
+    assert_equal(line.spans[1].content, String("\\", "\\"))
+    assert_equal(line.spans[2].content, "b")
+    assert_equal(text_width(line.spans[1].content), 2)
+
+
 def test_candidate_display_keeps_rows_distinct_and_source_bytes_unchanged() raises:
     var candidates: List[Candidate] = [
         Candidate(0, String("a\nb")),
         Candidate(1, String("ab")),
     ]
     var session = FinderSession(candidates^, Options())
-    assert_equal(_item_line(session._model, 0).spans[0].content, "a␊b")
+    assert_equal(
+        _item_line(session._model, 0).spans[0].content,
+        String("a", "\\", "u{000A}b"),
+    )
     assert_equal(_item_line(session._model, 1).spans[0].content, "ab")
 
     assert_true(_handle_key(session._model, KeyEvent.named(KeyEvent.ENTER)))
@@ -441,10 +486,10 @@ def test_candidate_display_preserves_scalar_highlight_positions() raises:
     var model = _seeded_model(candidates^, String("界"))
     var line = _item_line(model, 0)
     assert_equal(len(line.spans), 3)
-    assert_equal(line.spans[0].content, "a␊")
+    assert_equal(line.spans[0].content, String("a", "\\", "u{000A}"))
     assert_equal(line.spans[1].content, "界")
     assert_equal(line.spans[2].content, "🙂b")
-    assert_equal(text_width(line.spans[0].content), 2)
+    assert_equal(text_width(line.spans[0].content), 9)
     assert_equal(text_width(line.spans[1].content), 2)
     assert_equal(text_width(line.spans[2].content), 3)
 

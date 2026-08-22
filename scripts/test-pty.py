@@ -692,7 +692,7 @@ def wait_for_control_candidates(
         lambda current: current.line(1).startswith(
             "lang=auto matches=2/2 retained=2 shown=2 marks=0"
         )
-        and current.selected("a␊b")
+        and current.selected(r"a\u{000A}b")
         and current.contains("ab"),
     )
     attributes = termios.tcgetattr(slave)
@@ -730,7 +730,7 @@ def drive_read0_accepts_plain_candidate(
         screen,
         "plain candidate selected independently of the control candidate",
         lambda current: current.selected("ab")
-        and current.contains("a␊b"),
+        and current.contains(r"a\u{000A}b"),
     )
     os.write(master, b"\r")
 
@@ -759,6 +759,53 @@ def drive_c1_candidate(
     attributes = termios.tcgetattr(slave)
     if int(attributes[3]) & (termios.ICANON | termios.ECHO):
         fail(name, "controlling terminal did not enter raw mode", output, screen)
+    os.write(master, b"\r")
+
+
+def drive_injective_collision_pair(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    if name.startswith("C0"):
+        actual_display = r"a\u{000A}b"
+        literal_display = "a␊b"
+    else:
+        actual_display = r"c\u{009B}d"
+        literal_display = r"c\\u{009B}d"
+
+    read_until(
+        name,
+        master,
+        process,
+        output,
+        screen,
+        "both visually distinct sides of the display collision pair",
+        lambda current: current.line(1).startswith(
+            "lang=auto matches=2/2 retained=2 shown=2 marks=0"
+        )
+        and current.selected(actual_display)
+        and current.contains(literal_display),
+    )
+    attributes = termios.tcgetattr(slave)
+    if int(attributes[3]) & (termios.ICANON | termios.ECHO):
+        fail(name, "controlling terminal did not enter raw mode", output, screen)
+
+    if "literal" in name:
+        os.write(master, b"\x1b[B")
+        read_until(
+            name,
+            master,
+            process,
+            output,
+            screen,
+            "literal side selected independently",
+            lambda current: current.selected(literal_display)
+            and current.contains(actual_display),
+        )
     os.write(master, b"\r")
 
 
@@ -971,6 +1018,46 @@ def main() -> int:
     )
     run_case(
         binary,
+        "C0 actual collision side preserves bytes",
+        ["--read0", "--print0"],
+        b"a\nb\0",
+        0,
+        driver=drive_injective_collision_pair,
+        check_restoration=True,
+        candidates=b"a\nb\0" + "a␊b".encode() + b"\0",
+    )
+    run_case(
+        binary,
+        "C0 literal collision side preserves bytes",
+        ["--read0", "--print0"],
+        "a␊b".encode() + b"\0",
+        0,
+        driver=drive_injective_collision_pair,
+        check_restoration=True,
+        candidates=b"a\nb\0" + "a␊b".encode() + b"\0",
+    )
+    run_case(
+        binary,
+        "C1 actual collision side preserves bytes",
+        ["--read0", "--print0"],
+        b"c\xc2\x9bd\0",
+        0,
+        driver=drive_injective_collision_pair,
+        check_restoration=True,
+        candidates=b"c\xc2\x9bd\0c\\u{009B}d\0",
+    )
+    run_case(
+        binary,
+        "C1 literal collision side preserves bytes",
+        ["--read0", "--print0"],
+        b"c\\u{009B}d\0",
+        0,
+        driver=drive_injective_collision_pair,
+        check_restoration=True,
+        candidates=b"c\xc2\x9bd\0c\\u{009B}d\0",
+    )
+    run_case(
+        binary,
         "zh PTY phonetic",
         ["--lang", "zh", "--query", "bjdx"],
         "北京大学\n".encode(),
@@ -999,7 +1086,7 @@ def main() -> int:
     print(
         "Interactive PTY tests passed "
         "(accept, abort, terminal editing, paste, no-match guidance, multi, "
-        "source order, inert C0/C1 display, and explicit zh/ja/ko search)."
+        "source order, injective control display, and explicit zh/ja/ko search)."
     )
     return 0
 
