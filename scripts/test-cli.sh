@@ -495,6 +495,22 @@ if ! cmp -s "$test_dir/ja-expected" "$test_dir/ja-actual" || \
   exit 1
 fi
 
+# Native queries must remain valid UTF-8 while Yomi trims ASCII whitespace.
+# Check the compiled consumer so a dependency regression cannot hide behind
+# the source-level search tests' ASCII romaji queries.
+set +e
+printf 'カメラ\n日本語\n' | .pixi/bin/yuragi --lang ja --filter 'カ' \
+  >"$test_dir/ja-native-actual" 2>"$test_dir/ja-native-stderr"
+exit_code=$?
+set -e
+if [[ $exit_code -ne 0 ]] || \
+  ! cmp -s "$test_dir/ja-expected" "$test_dir/ja-native-actual" || \
+  [[ -s "$test_dir/ja-native-stderr" ]]; then
+  echo "native Japanese filtering must succeed and preserve Katakana source text (got exit $exit_code)" >&2
+  cat "$test_dir/ja-native-stderr" >&2
+  exit 1
+fi
+
 printf '한글\n한글\n' >"$test_dir/ko-expected"
 printf '한글\n한글\nnotes\n' | \
   .pixi/bin/yuragi --lang ko --filter 'han geul' \

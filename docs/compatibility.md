@@ -2,8 +2,8 @@
 
 ## Toolchain
 
-Release `0.1.0` pins Mojo `1.0.0`, Hibana `0.1.0`, Moji `0.1.0`, MojoTUI
-`0.1.1`, and Yomi `0.1.1` exactly in both the Pixi workspace and package
+The current checkout pins Mojo `1.0.0`, Hibana `0.1.0`, Moji `0.1.0`, MojoTUI
+`0.1.2`, and Yomi `0.1.2` exactly in both the Pixi workspace and package
 metadata. Compiler or ecosystem upgrades are explicit compatibility events and
 require the full locked test suite plus installed CLI verification on every
 supported platform.

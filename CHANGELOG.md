@@ -5,6 +5,12 @@ and uses semantic versioning after the first public release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Update Yomi and MojoTUI to `0.1.2`, including the fix for native Japanese
+  queries such as `--lang ja --filter カ` aborting on a UTF-8 boundary assertion.
+  Workspace and installed-package tests verify the original candidate output.
+
 ## [0.1.0] - 2026-08-22
 
 This is Yuragi's first source-tagged and three-platform packaged release.

@@ -19,20 +19,20 @@ requirements:
     - mojo-compiler ==1.0.0
     - mojo-hibana ==0.1.0
     - mojo-moji ==0.1.0
-    - mojo-mojotui ==0.1.1
-    - mojo-yomi ==0.1.1
+    - mojo-mojotui ==0.1.2
+    - mojo-yomi ==0.1.2
   host:
     - mojo-compiler ==1.0.0
     - mojo-hibana ==0.1.0
     - mojo-moji ==0.1.0
-    - mojo-mojotui ==0.1.1
-    - mojo-yomi ==0.1.1
+    - mojo-mojotui ==0.1.2
+    - mojo-yomi ==0.1.2
   run:
     - mojo-compiler ==1.0.0
     - mojo-hibana ==0.1.0
     - mojo-moji ==0.1.0
-    - mojo-mojotui ==0.1.1
-    - mojo-yomi ==0.1.1
+    - mojo-mojotui ==0.1.2
+    - mojo-yomi ==0.1.2
 
 tests:
   - script:
@@ -46,6 +46,9 @@ tests:
       - printf 'カメラ\n東京\n' | yuragi --lang ja --filter kamera > ja.txt
       - printf 'カメラ\n' > ja.expected
       - cmp ja.expected ja.txt
+      - printf 'カメラ\n日本語\n' | yuragi --lang ja --filter 'カ' > ja-native.txt 2> ja-native.stderr
+      - cmp ja.expected ja-native.txt
+      - test ! -s ja-native.stderr
       - printf '한글\n서울\n' | yuragi --lang ko --filter hangeul > ko.txt
       - printf '한글\n' > ko.expected
       - cmp ko.expected ko.txt
