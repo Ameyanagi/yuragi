@@ -439,6 +439,7 @@ struct _SearchPhase(Copyable, Equatable, ImplicitlyCopyable):
     comptime DRAIN = _SearchPhase(_value=1)
     comptime REVERSE = _SearchPhase(_value=2)
     comptime DONE = _SearchPhase(_value=3)
+    comptime IDENTITY = _SearchPhase(_value=4)
 
     def __init__(out self, *, _value: Int):
         self._value = _value
@@ -455,7 +456,8 @@ struct CooperativeSearch:
     per call. One candidate's exact matcher is the indivisible work unit;
     the elapsed-time budget is checked between units, never inside Hibana.
     The ranking heap is O(min(limit, corpus size)); exact refinement retains
-    O(match count) identities alongside the prepared query/workspace.
+    O(match count) identities alongside the prepared query/workspace. Empty
+    queries copy bounded source-order identity rows without weighted key scoring.
     """
 
     var generation: Int
@@ -492,20 +494,22 @@ struct CooperativeSearch:
         self.generation = generation
         self.query = String(query)
         self.case_mode = case_mode
-        self.incremental = (
-            index._can_refine(query, case_mode) and not index._previous_was_identity
+        self.incremental = index._can_refine(query, case_mode) and (
+            query == "" or not index._previous_was_identity
         )
-        self.scan_count = len(index._matching_indices) if self.incremental else len(
-            index
+        self.scan_count = 0 if query == "" else (
+            len(index._matching_indices) if self.incremental else len(index)
         )
         self.matching_indices = List[Int]()
-        self.query_keys = prepare_query_keys(index.language(), query, case_mode)
+        self.query_keys = List[
+            PreparedQueryKey
+        ]() if query == "" else prepare_query_keys(index.language(), query, case_mode)
         self.workspace = MatchWorkspace()
         self.limit = min(limit, len(index))
         self.scanned = 0
         self.scored_pairs = 0
-        self.total_matches = 0
-        self.phase = _SearchPhase.SCAN
+        self.total_matches = len(index) if query == "" else 0
+        self.phase = _SearchPhase.IDENTITY if query == "" else _SearchPhase.SCAN
         self.reverse_index = 0
         self.previous_id = previous_id.copy()
         self.selected_row = None
@@ -626,6 +630,30 @@ struct CooperativeSearch:
                     self.reverse_index, len(self.rows) - self.reverse_index - 1
                 )
                 self.reverse_index += 1
+            elif self.phase == _SearchPhase.IDENTITY:
+                if len(self.rows) == self.limit:
+                    # Identity is the corpus itself, as in SearchIndex.search:
+                    # no weighted scoring or redundant [0..N) cache is needed.
+                    index._matching_indices.clear()
+                    index._next_matching_indices.clear()
+                    index._last_scanned_count = 0
+                    index._last_scored_pair_count = 0
+                    index._last_position_reconstruction_count = 0
+                    index._last_incremental = self.incremental
+                    index._remember_query(self.query, self.case_mode)
+                    self.phase = _SearchPhase.DONE
+                    return
+                ref candidate = index._candidates[len(self.rows)]
+                if (
+                    self.previous_id
+                    and candidate.source_index == self.previous_id.value()
+                ):
+                    self.selected_row = len(self.rows)
+                self.rows.append(
+                    RankedCandidate(
+                        candidate.source_index, String(candidate.text), 0, List[Int]()
+                    )
+                )
             else:
                 return
             if perf_counter_ns() - started >= time_budget_ns:

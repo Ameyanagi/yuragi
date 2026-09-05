@@ -266,5 +266,51 @@ def test_cooperative_batches_preserve_exact_rows_for_each_language() raises:
             assert_true(rows[row] == exact.rows[row])
 
 
+def test_cooperative_identity_matches_sync_for_all_languages_and_limits() raises:
+    for language in [
+        LanguageMode.JA,
+        LanguageMode.AUTO,
+        LanguageMode.ZH,
+        LanguageMode.KO,
+    ]:
+        for text in ["a_b\n北京\na_b\n", ""]:
+            for limit in [1, Int.MAX]:
+                var index = SearchIndex(candidates_from_text(text), language)
+                var oracle = SearchIndex(candidates_from_text(text), language)
+                _ = index.search("a", CaseMode.SMART_ASCII, limit)
+                _ = oracle.search("a", CaseMode.SMART_ASCII, limit)
+                for generation in range(2):
+                    var expected = oracle.search("", CaseMode.SMART_ASCII, limit)
+                    var search = CooperativeSearch(
+                        index, "", CaseMode.SMART_ASCII, limit, generation, 2
+                    )
+                    while not search.done():
+                        var before = len(search.rows)
+                        search.advance(index, 1)
+                        assert_true(len(search.rows) - before <= 1)
+                    assert_equal(search.total_matches, expected.total_matches)
+                    if text != "" and limit == Int.MAX:
+                        assert_equal(search.selected_row.value(), 2)
+                    else:
+                        assert_true(not search.selected_row)
+                    var actual = search^.take_rows()
+                    assert_equal(len(actual), len(expected.rows))
+                    for row in range(len(actual)):
+                        assert_true(actual[row] == expected.rows[row])
+                    assert_equal(index.last_scanned_count(), 0)
+                    assert_equal(index.last_scored_pair_count(), 0)
+                    assert_equal(index.last_position_reconstruction_count(), 0)
+                    assert_equal(
+                        index.last_search_was_incremental(),
+                        oracle.last_search_was_incremental(),
+                    )
+                # Identity commits an implicit complete set, so later direct
+                # refinement must include every candidate again.
+                assert_true(
+                    index.search("a", CaseMode.SMART_ASCII, limit)
+                    == oracle.search("a", CaseMode.SMART_ASCII, limit)
+                )
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
