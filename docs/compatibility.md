@@ -29,8 +29,9 @@ build it.
 
 ## Current CLI limitations
 
-- Standard input is buffered in memory and decoded lossily: each invalid UTF-8
-  byte becomes U+FFFD REPLACEMENT CHARACTER, matching fzf behavior.
+- Standard input is framed incrementally with explicit byte, record-count, and
+  record-length budgets. Each invalid UTF-8 byte becomes U+FFFD REPLACEMENT
+  CHARACTER. Completed candidates remain in memory and are indexed after EOF.
 - `--filter ''` is implemented as identity selection.
 - Non-empty queries use Hibana's deterministic scorer and bounded top-K
   retention over prepared direct and, when explicitly requested, phonetic keys.
@@ -40,12 +41,14 @@ build it.
   external licensed dictionary/provider and are not included in `0.1.0`.
 - Interactive mode is implemented as an inline MojoTUI picker on the controlling
   terminal, with identity-stable selection, query seeding, automation, and
-  multi-select. Search is still synchronous and input is indexed before opening.
+  multi-select. Search, final ordering, and highlighting run cooperatively
+  between terminal events; input is indexed before opening. One candidate
+  match is indivisible, so the time budget is cooperative rather than a hard
+  wall-clock deadline.
 - The picker uses a fixed keymap and does not yet support `--bind`.
-- Preview, Windows line-oriented console behavior, configuration-file loading,
-  and built-in filesystem walking are not yet implemented. Read-only
-  configuration-path resolution plus generated Bash, Zsh, Fish, and PowerShell
-  bindings are available.
+- Preview, Windows line-oriented console behavior, and built-in filesystem
+  walking are not yet implemented. Validated flat configuration settings and
+  generated Bash, Zsh, Fish, and PowerShell bindings are available.
 
 ## CLI precedence
 
@@ -61,3 +64,12 @@ validly supplied, `--help` wins over `--version`, independent of flag order.
 - `2`: invalid command-line usage, standard-input I/O failure, unavailable mode, or
   unexpected internal/operational failure;
 - `130`: interactive abort through Escape or Ctrl-C.
+
+## Settings compatibility
+
+The configuration file supports only the documented flat TOML schema for `lang`,
+`case`, and `limit`. CLI values override corresponding environment values, which
+override file values and defaults. Malformed or unsupported syntax is rejected
+with path/key/value/correction context; use `--no-config` to bypass the file.
+This parser does not claim general TOML compatibility. See
+[configuration](configuration.md) for syntax, allowed values, and diagnostics.

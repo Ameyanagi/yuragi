@@ -205,7 +205,16 @@ def initial_automation(
 def initial_automation_indexed(
     mut index: SearchIndex, options: Options
 ) raises -> InitialAutomationDecision:
-    """Evaluate automation while retaining the initial exact search state."""
+    """Evaluate requested automation exactly; defer unnecessary large ranking."""
+    if (
+        options.query != ""
+        and len(index) > 64
+        and not options.select_1
+        and not options.exit_0
+    ):
+        # The picker opens before a large seeded query is ranked; its first
+        # generation advances on normal terminal turns. Automation remains exact.
+        return InitialAutomationDecision()
     var k = 1 if options.query == "" else (
         options.limit if options.has_limit else len(index)
     )

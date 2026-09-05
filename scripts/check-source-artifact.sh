@@ -12,6 +12,7 @@ trap 'rm -rf -- "$artifact_fixture"' EXIT
 cd "$artifact_fixture"
 touch config.toml
 export YURAGI_CONFIG_FILE="${artifact_fixture}/config.toml"
+unset YURAGI_LANG YURAGI_CASE YURAGI_LIMIT
 executable="${source_root}/.pixi/bin/yuragi"
 printf 'apple\nbanana\n' > input
 printf 'banana\n' > expected

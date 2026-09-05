@@ -74,3 +74,10 @@ The language parity matrix separates UTF-8 ingestion, Yomi representation
 generation by language, Hibana prepared-candidate scoring, source projection,
 and complete process time. Publish language-mode numbers only for deterministic
 synthetic data or licensed/provenanced corpora.
+
+## Input and interactive scaling
+
+[Interactive responsiveness protocol](interactive-responsiveness.md) records the
+fixed 100k CJK terminal latency test and before/after 1k/10k/50k marked-selection
+measurements. Commands, corpus construction, hardware, optimization settings,
+and [raw samples](results/interactive-2026-09-05.json) are included.

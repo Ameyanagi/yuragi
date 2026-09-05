@@ -8,6 +8,7 @@ from std.testing import (
 
 from yuragi.candidate import (
     CandidateInputBuffer,
+    InputLimits,
     RecordFraming,
     candidates_from_nul_text,
     candidates_from_text,
@@ -15,10 +16,10 @@ from yuragi.candidate import (
 )
 
 
-def _candidate_text_from_bytes(var bytes: List[UInt8]) -> String:
+def _candidate_text_from_bytes(var bytes: List[UInt8]) raises -> String:
     var input = CandidateInputBuffer()
     input.append_chunk(bytes[:])
-    var candidates = input.candidates()
+    var candidates = input^.candidates()
     return String(candidates[0].text)
 
 
@@ -59,7 +60,7 @@ def test_only_lf_is_a_record_delimiter() raises:
     assert_equal(candidates[0].text, "line\u2028separator")
 
 
-def test_utf8_is_decoded_only_after_controlled_chunks_are_aggregated() raises:
+def test_split_utf8_survives_until_its_record_is_complete() raises:
     var first = List[UInt8](length=4095, fill=UInt8(ord("a")))
     first.append(UInt8(0xE7))
 
@@ -79,7 +80,7 @@ def test_utf8_is_decoded_only_after_controlled_chunks_are_aggregated() raises:
     var input = CandidateInputBuffer()
     input.append_chunk(first[:])
     input.append_chunk(second[:])
-    var candidates = input.candidates()
+    var candidates = input^.candidates()
 
     assert_equal(len(candidates), 2)
     assert_equal(candidates[0].source_index, 0)
@@ -164,9 +165,9 @@ def test_input_buffer_dispatches_to_nul_framing() raises:
     bytes.append(UInt8(ord("b")))
     bytes.append(UInt8(0))
 
-    var input = CandidateInputBuffer()
+    var input = CandidateInputBuffer(RecordFraming.NUL)
     input.append_chunk(bytes[:])
-    var candidates = input.candidates(RecordFraming.NUL)
+    var candidates = input^.candidates()
     assert_equal(len(candidates), 1)
     assert_equal(candidates[0].text, "a\nb")
 
@@ -187,6 +188,75 @@ def test_record_framing_equality() raises:
     assert_true(RecordFraming.LINES == RecordFraming.LINES)
     assert_true(RecordFraming.NUL == RecordFraming.NUL)
     assert_false(RecordFraming.LINES == RecordFraming.NUL)
+
+
+def test_every_utf8_chunk_boundary_and_incremental_record_release() raises:
+    var text = String("a界🙂\r\n北京\nfinal\r")
+    var bytes = text.as_bytes()
+    for split in range(len(bytes) + 1):
+        var input = CandidateInputBuffer()
+        input.append_chunk(bytes[:split])
+        input.append_chunk(bytes[split:])
+        assert_equal(input.completed_record_count(), 2)
+        assert_equal(input.pending_byte_count(), 6)
+        var candidates = input^.candidates()
+        assert_equal(len(candidates), 3)
+        assert_equal(candidates[0].text, "a界🙂")
+        assert_equal(candidates[1].text, "北京")
+        assert_equal(candidates[2].text, "final\r")
+
+
+def test_nul_record_frames_across_every_chunk_boundary() raises:
+    var text = String("界\n🙂\x00\x00尾\r")
+    var bytes = text.as_bytes()
+    for split in range(len(bytes) + 1):
+        var input = CandidateInputBuffer(RecordFraming.NUL)
+        input.append_chunk(bytes[:split])
+        input.append_chunk(bytes[split:])
+        var candidates = input^.candidates()
+        assert_equal(len(candidates), 3)
+        assert_equal(candidates[0].text, "界\n🙂")
+        assert_equal(candidates[1].text, "")
+        assert_equal(candidates[2].text, "尾\r")
+
+
+def _assert_limit(text: String, limits: InputLimits, flag: String) raises:
+    var rejected = False
+    try:
+        var input = CandidateInputBuffer(RecordFraming.LINES, limits)
+        input.append_chunk(text.as_bytes())
+        _ = input^.candidates()
+    except error:
+        rejected = String(error).find(flag) >= 0
+    assert_true(rejected)
+
+
+def test_limits_reject_before_retaining_excess_input() raises:
+    _assert_limit("a\nb\n", InputLimits(3, 10, 10), "--max-input-bytes=3")
+    _assert_limit("a\nb", InputLimits(100, 1, 10), "--max-candidates=1")
+    _assert_limit("\n\n", InputLimits(100, 1, 10), "--max-candidates=1")
+    _assert_limit("abcd", InputLimits(100, 10, 3), "--max-record-bytes=3")
+    var input = CandidateInputBuffer(RecordFraming.LINES, InputLimits(4, 1, 3))
+    input.append_chunk(String("abc\n").as_bytes())
+    assert_equal(input.pending_byte_count(), 0)
+    assert_equal(len(input^.candidates()), 1)
+
+
+def test_input_limit_construction_and_explicit_validation_reject_zero() raises:
+    var rejected = False
+    try:
+        _ = InputLimits(0)
+    except error:
+        rejected = String(error).find("max_input_bytes=0") >= 0
+    assert_true(rejected)
+    var limits = InputLimits()
+    limits.max_record_bytes = 0
+    rejected = False
+    try:
+        limits.validate()
+    except error:
+        rejected = String(error).find("max_record_bytes=0") >= 0
+    assert_true(rejected)
 
 
 def main() raises:

@@ -5,10 +5,11 @@ from std.sys import argv, exit, stderr, stdin
 from yuragi.candidate import (
     Candidate,
     CandidateInputBuffer,
+    InputLimits,
     RecordFraming,
     render_candidates,
 )
-from yuragi.config import config_path
+from yuragi.config import apply_runtime_configuration, config_path
 from yuragi.doctor import detect_doctor_report
 from yuragi.explain import render_explanation
 from yuragi.interactive import FinderOutcome, FinderSession
@@ -27,9 +28,11 @@ from yuragi.search_index import SearchIndex
 from yuragi.shell import shell_script
 
 
-def _read_standard_input(framing: RecordFraming) raises -> List[Candidate]:
-    """Read standard input once and decode buffered bytes as lossy UTF-8."""
-    var input = CandidateInputBuffer()
+def _read_standard_input(
+    framing: RecordFraming, limits: InputLimits
+) raises -> List[Candidate]:
+    """Incrementally frame bounded standard input with per-record lossy UTF-8."""
+    var input = CandidateInputBuffer(framing, limits)
     var buffer = List[UInt8](length=4096, fill=0)
     var stream = stdin
     while True:
@@ -37,7 +40,7 @@ def _read_standard_input(framing: RecordFraming) raises -> List[Candidate]:
         if count == 0:
             break
         input.append_chunk(buffer[:count])
-    return input.candidates(framing)
+    return input^.candidates()
 
 
 def _argv_strings() -> List[String]:
@@ -74,13 +77,14 @@ def main():
         return
     if options.command == CommandKind.DOCTOR:
         try:
-            print(detect_doctor_report(), end="")
+            print(detect_doctor_report(no_config=options.no_config), end="")
         except error:
             print("yuragi: doctor error: ", error, sep="", file=stderr)
             exit(2)
         return
 
     try:
+        apply_runtime_configuration(options)
         validate_foundation_mode(options)
     except error:
         print("yuragi: ", error, sep="", file=stderr)
@@ -99,7 +103,14 @@ def main():
     var candidates = List[Candidate]()
     try:
         var input_framing = RecordFraming.NUL if options.read0 else RecordFraming.LINES
-        candidates = _read_standard_input(input_framing)
+        candidates = _read_standard_input(
+            input_framing,
+            InputLimits(
+                options.max_input_bytes,
+                options.max_candidates,
+                options.max_record_bytes,
+            ),
+        )
     except error:
         print("yuragi: input error: ", error, sep="", file=stderr)
         exit(2)

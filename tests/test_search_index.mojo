@@ -8,7 +8,7 @@ from yuragi.candidate import candidates_from_text
 from yuragi.language import LanguageMode
 from yuragi.options import Options
 from yuragi.pipeline import search_picker_query
-from yuragi.search_index import SearchIndex
+from yuragi.search_index import CooperativeSearch, SearchIndex
 
 
 def test_index_search_matches_exact_ranked_page() raises:
@@ -237,6 +237,33 @@ def test_near_int_max_limit_preserves_empty_and_identity_semantics() raises:
         assert_equal(len(identity_page.rows), 2)
         assert_equal(identity_page.rows[0].text, "one")
         assert_equal(identity_page.rows[1].text, "two")
+
+
+def test_cooperative_batches_preserve_exact_rows_for_each_language() raises:
+    var languages: List[LanguageMode] = [
+        LanguageMode.AUTO,
+        LanguageMode.JA,
+        LanguageMode.ZH,
+        LanguageMode.KO,
+    ]
+    var queries: List[String] = ["a", "ka", "bei", "카"]
+    for mode in range(len(languages)):
+        var candidates = candidates_from_text("camera\nかな\n北京\n카메라\ncamera\n")
+        var index = SearchIndex(candidates^, languages[mode])
+        var exact = index.search(queries[mode], CaseMode.SMART_ASCII, 3)
+        var search = CooperativeSearch(index, queries[mode], CaseMode.SMART_ASCII, 3, 1)
+        var turns = 0
+        while not search.done():
+            var before = search.scanned
+            search.advance(index, 1)
+            assert_true(search.scanned - before <= 1)
+            turns += 1
+            assert_true(turns < 100)
+        assert_equal(search.total_matches, exact.total_matches)
+        var rows = search^.take_rows()
+        assert_equal(len(rows), len(exact.rows))
+        for row in range(len(rows)):
+            assert_true(rows[row] == exact.rows[row])
 
 
 def main() raises:

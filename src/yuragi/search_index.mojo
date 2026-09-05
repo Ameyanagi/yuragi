@@ -4,7 +4,8 @@ from hibana import CaseMode, MatchResult, Scheme, TopK
 from hibana.fast import fast_score_at
 from hibana.parallel import rank_corpus_exact
 from hibana.prepared import MatchWorkspace, PreparedCorpus
-from std.collections import List
+from std.collections import List, Optional
+from std.time import perf_counter_ns
 from yomi import search_key_kinds_compatible
 
 from yuragi.candidate import Candidate
@@ -25,6 +26,7 @@ struct _BestKeyMatch(Copyable, ImplicitlyCopyable):
     var score: Int
     var key_index: Int
     var query_index: Int
+    var scored_pairs: Int
 
     def __init__(
         out self,
@@ -37,6 +39,7 @@ struct _BestKeyMatch(Copyable, ImplicitlyCopyable):
         self.score = score
         self.key_index = key_index
         self.query_index = query_index
+        self.scored_pairs = 0
 
 
 struct SearchIndex(Sized):
@@ -205,6 +208,7 @@ struct SearchIndex(Sized):
         count_pairs: Bool = True,
     ) raises -> _BestKeyMatch:
         var best = _BestKeyMatch()
+        var scored_pairs = 0
         var key_start = self._candidate_key_offsets[candidate_index]
         var key_end = self._candidate_key_offsets[candidate_index + 1]
         for key_index in range(key_start, key_end):
@@ -213,6 +217,7 @@ struct SearchIndex(Sized):
                 ref query_key = query_keys[query_index]
                 if not search_key_kinds_compatible(query_key.kind, key.kind):
                     continue
+                scored_pairs += 1
                 if count_pairs:
                     self._last_scored_pair_count += 1
                 var result = workspace.score_at(
@@ -236,6 +241,7 @@ struct SearchIndex(Sized):
                     )
                 ):
                     best = _BestKeyMatch(True, weighted_score, key_index, query_index)
+        best.scored_pairs = scored_pairs
         return best
 
     def _scan_candidate(
@@ -408,3 +414,225 @@ struct SearchIndex(Sized):
         self._last_incremental = incremental
         self._remember_query(query, case_mode)
         return page^
+
+
+struct _SearchEntry(Copyable, ImplicitlyCopyable):
+    var candidate_index: Int
+    var best: _BestKeyMatch
+
+    def __init__(out self, candidate_index: Int, best: _BestKeyMatch):
+        self.candidate_index = candidate_index
+        self.best = best
+
+
+def _entry_worse(left: _SearchEntry, right: _SearchEntry) -> Bool:
+    return left.best.score < right.best.score or (
+        left.best.score == right.best.score
+        and left.candidate_index > right.candidate_index
+    )
+
+
+struct _SearchPhase(Copyable, Equatable, ImplicitlyCopyable):
+    var _value: Int
+
+    comptime SCAN = _SearchPhase(_value=0)
+    comptime DRAIN = _SearchPhase(_value=1)
+    comptime REVERSE = _SearchPhase(_value=2)
+    comptime DONE = _SearchPhase(_value=3)
+
+    def __init__(out self, *, _value: Int):
+        self._value = _value
+
+    def __eq__(self, other: Self) -> Bool:
+        return self._value == other._value
+
+
+struct CooperativeSearch:
+    """One cancellable exact search, including bounded heap drain and reversal.
+
+    No approximate scores or partial totals are published. The scan, position
+    reconstruction, and ordering phases each advance by at most ``work_items``
+    per call. One candidate's exact matcher is the indivisible work unit;
+    the elapsed-time budget is checked between units, never inside Hibana.
+    The ranking heap is O(min(limit, corpus size)); exact refinement retains
+    O(match count) identities alongside the prepared query/workspace.
+    """
+
+    var generation: Int
+    var query: String
+    var case_mode: CaseMode
+    var incremental: Bool
+    var scan_count: Int
+    var matching_indices: List[Int]
+    var query_keys: List[PreparedQueryKey]
+    var workspace: MatchWorkspace
+    var limit: Int
+    var scanned: Int
+    var scored_pairs: Int
+    var total_matches: Int
+    var phase: _SearchPhase
+    var reverse_index: Int
+    var previous_id: Optional[Int]
+    var selected_row: Optional[Int]
+    var heap: List[_SearchEntry]
+    var rows: List[RankedCandidate]
+    var positions: List[Int]
+
+    def __init__(
+        out self,
+        index: SearchIndex,
+        query: StringSlice,
+        case_mode: CaseMode,
+        limit: Int,
+        generation: Int,
+        previous_id: Optional[Int] = None,
+    ) raises:
+        if limit < 1:
+            raise Error("cooperative search limit must be >= 1; got ", limit)
+        self.generation = generation
+        self.query = String(query)
+        self.case_mode = case_mode
+        self.incremental = (
+            index._can_refine(query, case_mode) and not index._previous_was_identity
+        )
+        self.scan_count = len(index._matching_indices) if self.incremental else len(
+            index
+        )
+        self.matching_indices = List[Int]()
+        self.query_keys = prepare_query_keys(index.language(), query, case_mode)
+        self.workspace = MatchWorkspace()
+        self.limit = min(limit, len(index))
+        self.scanned = 0
+        self.scored_pairs = 0
+        self.total_matches = 0
+        self.phase = _SearchPhase.SCAN
+        self.reverse_index = 0
+        self.previous_id = previous_id.copy()
+        self.selected_row = None
+        self.heap = List[_SearchEntry]()
+        self.rows = List[RankedCandidate]()
+        self.positions = List[Int]()
+
+    def done(self) -> Bool:
+        return self.phase == _SearchPhase.DONE
+
+    def _sift_down(mut self):
+        var current = 0
+        while current * 2 + 1 < len(self.heap):
+            var child = current * 2 + 1
+            if child + 1 < len(self.heap) and _entry_worse(
+                self.heap[child + 1], self.heap[child]
+            ):
+                child += 1
+            if not _entry_worse(self.heap[child], self.heap[current]):
+                break
+            self.heap.swap_elements(child, current)
+            current = child
+
+    def _push(mut self, entry: _SearchEntry):
+        if len(self.heap) < self.limit:
+            self.heap.append(entry)
+            var current = len(self.heap) - 1
+            while current > 0:
+                var parent = (current - 1) // 2
+                if not _entry_worse(self.heap[current], self.heap[parent]):
+                    break
+                self.heap.swap_elements(current, parent)
+                current = parent
+        elif self.limit > 0 and _entry_worse(self.heap[0], entry):
+            self.heap[0] = entry
+            self._sift_down()
+
+    def advance(
+        mut self,
+        mut index: SearchIndex,
+        work_items: Int = 64,
+        time_budget_ns: Int = 2_000_000,
+    ) raises:
+        """Do bounded work, returning to the terminal even during final sorting."""
+        if work_items < 1 or time_budget_ns < 1:
+            raise Error("search batch work_items and time_budget_ns must be >= 1")
+        var started = perf_counter_ns()
+        for _ in range(work_items):
+            if self.phase == _SearchPhase.SCAN:
+                if self.scanned == self.scan_count:
+                    self.phase = _SearchPhase.DRAIN
+                    continue
+                var candidate_index = index._matching_indices[
+                    self.scanned
+                ] if self.incremental else self.scanned
+                var best = index._best_key_match(
+                    candidate_index, self.query_keys, self.workspace, False
+                )
+                self.scored_pairs += best.scored_pairs
+                if best.matched:
+                    self.total_matches += 1
+                    self.matching_indices.append(candidate_index)
+                    self._push(_SearchEntry(candidate_index, best))
+                self.scanned += 1
+            elif self.phase == _SearchPhase.DRAIN:
+                if len(self.heap) == 0:
+                    self.phase = _SearchPhase.REVERSE
+                    continue
+                self.heap.swap_elements(0, len(self.heap) - 1)
+                var entry = self.heap.pop()
+                self._sift_down()
+                var best = entry.best
+                var reconstructed = self.workspace.match_into_at(
+                    self.query_keys[best.query_index].pattern,
+                    index._corpus,
+                    best.key_index,
+                    self.positions,
+                )
+                debug_assert(reconstructed.matched)
+                ref candidate = index._candidates[entry.candidate_index]
+                var representation = candidate_representation_at(
+                    index._language,
+                    candidate.text,
+                    index._keys[best.key_index].bundle_ordinal,
+                )
+                var positions = project_key_positions(
+                    representation, self.positions, candidate.text
+                )
+                if (
+                    self.previous_id
+                    and candidate.source_index == self.previous_id.value()
+                ):
+                    self.selected_row = len(self.rows)
+                self.rows.append(
+                    RankedCandidate(
+                        candidate.source_index,
+                        String(candidate.text),
+                        best.score,
+                        positions^,
+                        index._keys[best.key_index].kind,
+                    )
+                )
+            elif self.phase == _SearchPhase.REVERSE:
+                if self.reverse_index >= len(self.rows) // 2:
+                    if self.selected_row:
+                        self.selected_row = (
+                            len(self.rows) - self.selected_row.value() - 1
+                        )
+                    swap(index._matching_indices, self.matching_indices)
+                    index._last_scanned_count = self.scanned
+                    index._last_scored_pair_count = self.scored_pairs
+                    index._last_incremental = self.incremental
+                    index._last_position_reconstruction_count = len(self.rows)
+                    index._remember_query(self.query, self.case_mode)
+                    self.phase = _SearchPhase.DONE
+                    return
+                self.rows.swap_elements(
+                    self.reverse_index, len(self.rows) - self.reverse_index - 1
+                )
+                self.reverse_index += 1
+            else:
+                return
+            if perf_counter_ns() - started >= time_budget_ns:
+                return
+
+    def take_rows(var self) -> List[RankedCandidate]:
+        debug_assert(self.done())
+        var rows = List[RankedCandidate]()
+        swap(rows, self.rows)
+        return rows^

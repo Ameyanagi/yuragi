@@ -11,6 +11,7 @@ import struct
 import subprocess
 import sys
 import termios
+import tempfile
 import time
 import unicodedata
 from pathlib import Path
@@ -809,6 +810,50 @@ def drive_injective_collision_pair(
     os.write(master, b"\r")
 
 
+def drive_large_query_cancellation(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    read_until(
+        name, master, process, output, screen, "large corpus picker",
+        lambda current: current.contains("matches=10000/10000"),
+    )
+    os.write(master, "京".encode())
+    read_until(
+        name, master, process, output, screen, "searching query frame",
+        lambda current: current.line(0).startswith("> 京")
+        and current.contains("Searching"),
+    )
+    # A new generation must reach the screen before the old ranking finishes.
+    os.write(master, b"\x15" + "不存在".encode())
+    read_until(
+        name, master, process, output, screen, "replacement query frame",
+        lambda current: current.line(0).startswith("> 不存在")
+        and current.contains("Searching"),
+    )
+    os.write(master, b"\x03" if "Ctrl-C" in name else b"\x1b")
+
+
+def drive_seeded_large_query_finishes(
+    name: str,
+    master: int,
+    slave: int,
+    process: subprocess.Popen[bytes],
+    output: bytearray,
+    screen: TerminalScreen,
+) -> None:
+    read_until(
+        name, master, process, output, screen, "exact completed seeded query",
+        lambda current: current.contains("matches=1000/1000 retained=3")
+        and not current.contains("Searching"),
+    )
+    os.write(master, b"\r")
+
+
 def run_case(
     binary: Path,
     name: str,
@@ -821,6 +866,7 @@ def run_case(
     candidates: bytes = CANDIDATES,
 ) -> None:
     master, slave = pty.openpty()
+    config_directory = tempfile.TemporaryDirectory(prefix="yuragi-pty-config-")
     process: subprocess.Popen[bytes] | None = None
     output = bytearray()
     screen = TerminalScreen()
@@ -833,6 +879,11 @@ def run_case(
         original_attributes = termios.tcgetattr(slave)
         environment = os.environ.copy()
         environment["TERM"] = "xterm-256color"
+        for key in ("YURAGI_LANG", "YURAGI_CASE", "YURAGI_LIMIT"):
+            environment.pop(key, None)
+        environment["YURAGI_CONFIG_FILE"] = str(
+            Path(config_directory.name) / "absent.toml"
+        )
         # Yuragi resolves its terminal from the first standard descriptor
         # that is a TTY (here stderr, the PTY slave) via ttyname_r, so the
         # child needs no new session or TIOCSCTTY; the parent can keep
@@ -897,6 +948,7 @@ def run_case(
                 process.stdout.close()
         os.close(master)
         os.close(slave)
+        config_directory.cleanup()
 
 
 def main() -> int:
@@ -1083,10 +1135,25 @@ def main() -> int:
         driver=drive_language_match,
         candidates="한글\n한글\nnotes\n".encode(),
     )
+    run_case(
+        binary, "large seeded query completes with exact limited totals",
+        ["--query", "京", "--limit", "3"], "北京 0000\n".encode(), 0,
+        driver=drive_seeded_large_query_finishes, check_restoration=True,
+        candidates="".join(f"北京 {index:04d}\n" for index in range(1000)).encode(),
+    )
+    large_corpus = "".join(
+        f"北京 カメラ 카메라 検索 {index:05d}\n" for index in range(10_000)
+    ).encode()
+    for abort in ("Escape", "Ctrl-C"):
+        run_case(
+            binary, f"large query {abort} cancels stale generation", [], b"", 130,
+            driver=drive_large_query_cancellation,
+            check_restoration=True, candidates=large_corpus,
+        )
     print(
         "Interactive PTY tests passed "
         "(accept, abort, terminal editing, paste, no-match guidance, multi, "
-        "source order, injective control display, and explicit zh/ja/ko search)."
+        "source order, injective control display, explicit zh/ja/ko search, and large query cancellation)."
     )
     return 0
 

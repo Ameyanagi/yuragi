@@ -4,6 +4,10 @@ set -euo pipefail
 test_dir="$(mktemp -d)"
 trap 'rm -rf -- "$test_dir"' EXIT
 
+# Keep the CLI contract independent of the developer's personal settings.
+export YURAGI_CONFIG_FILE="$test_dir/absent.toml"
+unset YURAGI_LANG YURAGI_CASE YURAGI_LIMIT
+
 printf 'first\r\n\nlast\r' >"$test_dir/input"
 printf 'first\n\nlast\r\n' >"$test_dir/expected"
 .pixi/bin/yuragi --filter '' \
@@ -63,67 +67,67 @@ fi
 
 help_text="$(.pixi/bin/yuragi --help)"
 if ! grep -Fxq \
-  '  -q, --query STR       seed the interactive prompt with STR' \
+  '  -q, --query STR              seed the interactive prompt with STR' \
   <<<"$help_text"; then
   echo "--query help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
-  '  -1, --select-1        accept a sole initial match without the picker' \
+  '  -1, --select-1               accept a sole initial match without the picker' \
   <<<"$help_text"; then
   echo "--select-1 help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
-  '  -0, --exit-0          exit 1 on no initial matches without the picker' \
+  '  -0, --exit-0                 exit 1 on no initial matches without the picker' \
   <<<"$help_text"; then
   echo "--exit-0 help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
-  '  -m, --multi           select multiple candidates with TAB/Shift-TAB' \
+  '  -m, --multi                  select multiple candidates with TAB/Shift-TAB' \
   <<<"$help_text"; then
   echo "--multi help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
-  '      --lang LANGUAGE   auto (direct), ja, zh, or ko (default: auto)' \
+  '      --lang LANGUAGE          auto (direct), ja, zh, or ko (default: auto)' \
   <<<"$help_text"; then
   echo "--lang help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
-  '      --limit N         emit at most N best-ranked candidates' \
+  '      --limit N                emit at most N best-ranked candidates' \
   <<<"$help_text"; then
   echo "--limit help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
-  '  -i, --ignore-case     match case-insensitively (ASCII)' \
+  '  -i, --ignore-case            match case-insensitively (ASCII)' \
   <<<"$help_text"; then
   echo "--ignore-case help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
-  '  +i, --no-ignore-case  match case-sensitively' \
+  '  +i, --no-ignore-case         match case-sensitively' \
   <<<"$help_text"; then
   echo "--no-ignore-case help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
-  '      --read0           read NUL-delimited candidates from standard input' \
+  '      --read0                  read NUL-delimited candidates from standard input' \
   <<<"$help_text"; then
   echo "--read0 help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
-  '      --print0          write NUL-delimited candidates to standard output' \
+  '      --print0                 write NUL-delimited candidates to standard output' \
   <<<"$help_text"; then
   echo "--print0 help description is not column-aligned" >&2
   exit 1
 fi
 if ! grep -Fxq \
-  '      --explain         print rank, score, key kind, and match positions' \
+  '      --explain                print rank, score, key kind, and match positions' \
   <<<"$help_text"; then
   echo "--explain help description is not column-aligned" >&2
   exit 1
@@ -217,7 +221,7 @@ printf '%s\n' \
   'ok version: 0.1.0' \
   'ok executable: running' \
   "info config path: $doctor_config_home/yuragi/config.toml" \
-  'info config file: absent; loading is not enabled in this release' \
+  'info config file: absent; environment and defaults apply' \
   'warn shell hint: SHELL is not set' \
   'warn path finder: fd, fdfind, and find were not found on PATH' \
   'info shell scripts: dependencies are checked when each binding runs' \
@@ -611,3 +615,7 @@ if ! grep -Fq 'yuragi: input error:' "$test_dir/stderr" || \
   echo "stdin read failure did not produce a useful diagnostic" >&2
   exit 1
 fi
+
+python3 scripts/test-ingestion.py .pixi/bin/yuragi
+
+python3 scripts/test-config.py .pixi/bin/yuragi

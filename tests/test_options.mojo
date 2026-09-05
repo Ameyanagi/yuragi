@@ -143,16 +143,17 @@ def test_help_and_version_text() raises:
     assert_true(options.version_requested)
     assert_true(usage().startswith("Usage: yuragi [--filter QUERY | --query QUERY]"))
     assert_true(
-        "      --limit N         emit at most N best-ranked candidates" in usage()
-    )
-    assert_true(
-        "  -q, --query STR       seed the interactive prompt with STR" in usage()
-    )
-    assert_true(
-        "  -m, --multi           select multiple candidates with TAB/Shift-TAB"
+        "      --limit N                emit at most N best-ranked candidates"
         in usage()
     )
-    assert_true("  +i, --no-ignore-case  match case-sensitively" in usage())
+    assert_true(
+        "  -q, --query STR              seed the interactive prompt with STR" in usage()
+    )
+    assert_true(
+        "  -m, --multi                  select multiple candidates with TAB/Shift-TAB"
+        in usage()
+    )
+    assert_true("  +i, --no-ignore-case         match case-sensitively" in usage())
     assert_true(
         "Interactive flag matrix: --query seeds the prompt; --select-1" in usage()
     )
@@ -176,7 +177,8 @@ def test_explain_option_and_usage() raises:
     var options = parse_options(args^)
     assert_true(options.explain)
     assert_true(
-        "      --explain         print rank, score, key kind, and match positions"
+        "      --explain                print rank, score, key kind, and match"
+        " positions"
         in usage()
     )
 

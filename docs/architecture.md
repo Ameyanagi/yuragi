@@ -31,7 +31,7 @@ candidate model ---- selection orchestration
         MojoTUI owns interactive terminal mechanics only
 ```
 
-The implemented foundation includes options, whole-stream UTF-8 ingestion,
+The implemented foundation includes options, bounded per-record UTF-8 ingestion,
 candidate framing, output framing, prepared direct and explicit-language key
 sets, exact pre-limit match counts, bounded top-K rows, and an inline MojoTUI
 picker. An empty query is identity selection. The picker and filter share the
@@ -60,15 +60,21 @@ follow the documented lossy-decoding contract.
 
 ## Search state and ranking contracts
 
-The executable's internal orchestration deliberately uses one call pattern:
+Synchronous filter orchestration uses the exact prepared index:
 
 ```mojo
 var index = SearchIndex(candidates^, language)
 var page = index.search(query, case_mode, k)
 ```
 
-This is an internal implementation seam shared by filtering and the picker,
-not an installed or supported Mojo library API.
+The picker uses `CooperativeSearch` over that same prepared index and exact
+Hibana scoring. One owned query generation advances through scoring, bounded
+heap draining, position reconstruction, and reversal. It commits the complete
+match-ID cache and result rows only when complete. An active search subscription
+arms a public runtime-adapter deadline for one next turn; processing that turn
+changes its revision to request the next. There is at most one scheduled search
+turn, and no periodic search timer while idle. Query changes invalidate prior
+generations. These are internal seams, not an installed or supported Mojo API.
 
 The index retains the complete exact match-ID set from the previous query. An
 identical query or a scalar-safe query extension with the same case mode scans
