@@ -150,7 +150,14 @@ struct _FinderModel(Movable):
                 self.selected_source_index = matches[0].source_index
             self.matches = matches^
             self.total_matches = total_matches
-            if len(self.matches) == 0 and not options.select_1 and not options.exit_0:
+            if (
+                len(self.matches) == 0
+                and len(self.index) > 64
+                and not options.select_1
+                and not options.exit_0
+            ):
+                # Only the large-corpus pre-picker path intentionally defers
+                # ranking. An exact empty small-corpus result is already final.
                 _rerank(self)
 
 

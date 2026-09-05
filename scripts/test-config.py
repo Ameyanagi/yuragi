@@ -64,6 +64,8 @@ with tempfile.TemporaryDirectory(prefix="yuragi-config-") as directory:
     assert not (root / "forbidden-marker").exists()
     run(["doctor"], code=2, error="remove this unsupported key")
     assert "disabled by --no-config" in run(["doctor", "--no-config"])
+    run(["doctor", "--no-config", "EXTRA"], code=2,
+        error="unexpected argument: EXTRA; use yuragi doctor [--no-config]")
     run(["--filter", "RE", "--no-config"], output="READ\n")
     # No-config only disables files, and leaves explicit environment settings.
     run(["--filter", "RE", "--no-config"], variables={"YURAGI_CASE": "ignore"},

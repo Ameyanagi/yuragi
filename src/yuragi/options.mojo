@@ -84,10 +84,16 @@ def _parse_subcommand(args: List[String], mut options: Options) raises -> Bool:
         return False
     var command = args[1]
     if command == "doctor":
-        if len(args) == 3 and args[2] == "--no-config":
+        var next_argument = 2
+        if len(args) > 2 and args[2] == "--no-config":
             options.no_config = True
-        elif len(args) != 2:
-            raise Error("doctor accepts no arguments; got: ", args[2])
+            next_argument = 3
+        if len(args) > next_argument:
+            raise Error(
+                "doctor accepts only optional --no-config; unexpected argument: ",
+                args[next_argument],
+                "; use yuragi doctor [--no-config]",
+            )
         options.command = CommandKind.DOCTOR
         return True
     if command == "shell":

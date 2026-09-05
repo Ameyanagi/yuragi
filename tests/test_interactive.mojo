@@ -767,5 +767,27 @@ def test_search_deadline_exists_only_for_an_active_generation() raises:
     assert_false(Bool(adapter.next_deadline_ns()))
 
 
+def test_seeded_empty_results_are_not_ranked_twice_at_the_deferral_boundary() raises:
+    var options = Options()
+    options.query = String("absent")
+    for count in range(64, 66):
+        var candidates = List[Candidate]()
+        for index in range(count):
+            candidates.append(Candidate(index, String("北京")))
+        var session = FinderSession(candidates^, options)
+        if count == 64:
+            assert_equal(session._model.query_generation, 0)
+            assert_false(Bool(session._model.search))
+            assert_false(session._model.index.last_search_was_incremental())
+            assert_equal(session._model.index.last_scanned_count(), 64)
+        else:
+            assert_equal(session._model.query_generation, 1)
+            assert_true(Bool(session._model.search))
+            while session._model.search:
+                _advance_search(session._model, session._model.query_generation)
+            assert_equal(session._model.index.last_scanned_count(), 65)
+        assert_equal(_match_count(session._model), 0)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
