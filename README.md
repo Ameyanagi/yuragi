@@ -91,7 +91,7 @@ Yuragi installs an executable named `yuragi`. Its internal Mojo modules live
 under `src/yuragi/`; the distribution does not install or support them as an
 importable Mojo package. The Conda distribution is also named `yuragi`.
 
-The executable implements validated options, buffered UTF-8 stdin ingestion,
+The executable implements validated options, bounded incremental UTF-8 stdin ingestion,
 stable candidate framing, deterministic stdout, and an inline interactive
 application adapter. Invalid UTF-8 bytes are replaced with U+FFFD rather than
 failing. An empty filter query is an identity filter:
@@ -125,6 +125,13 @@ consumer can split on the first four tabs even when TEXT itself contains tabs.
 printf 'apple\nbanana\n' | pixi run yuragi --filter ba --explain
 1	390	original	0,1	banana
 ```
+
+Input is framed as chunks arrive and decoded one record at a time. By default,
+Yuragi accepts at most 268,435,456 raw bytes, 1,000,000 candidates, and 1,048,576
+raw bytes per record. Adjust these independently with `--max-input-bytes N`,
+`--max-candidates N`, and `--max-record-bytes N`; exceeding a budget exits 2 with
+the offending limit and a correction. The picker opens after EOF, and Ctrl-C
+can interrupt a producer that is still being read.
 
 Use `--limit N` to emit at most the best N candidates. A non-empty query that
 matches nothing exits with status 1 and writes no candidate output.
@@ -227,7 +234,13 @@ An empty prompt is a lazy identity view: it preserves the exact full count and
 source order but materializes only the rows visible in the terminal. This keeps
 ranked-row startup and redraw work bounded by the viewport instead of the
 corpus size. `--limit N` bounds selectable interactive rows while the counter
-retains the exact untruncated match count.
+retains the exact untruncated match count. Large searches run in bounded turns,
+including final ranking and highlight reconstruction, so typing, Escape, and
+Ctrl-C remain available. While a query is incomplete the picker shows
+`Searching` and `matches=?`; Enter waits for current results. Replacing a query
+cancels its old generation. Marks survive query edits and are emitted in source
+order using one corpus pass, including large selections. Reproducible timing
+results are in [the interactive benchmark protocol](benchmarks/interactive-responsiveness.md).
 
 Exit codes are `0` for a successful match or acceptance, `1` when there is no
 match or nothing to accept, `2` for usage or operational errors, and `130` for
@@ -252,16 +265,28 @@ Alt-C directory selection, and fzf-style `**` path completion. They prefer
 the time it runs. Set `YURAGI_BIN` when the executable is not named `yuragi` or
 is not discoverable through the shell's normal command lookup.
 
-Run `yuragi doctor` for a read-only report of the resolved configuration path,
-shell hint, and available path finder. Missing optional shell hints and finders
-are warnings and do not make `doctor` fail; an operational failure to resolve
-the configuration location exits 2.
+Run `yuragi doctor` to validate the configuration file and inspect shell/path
+finder dependencies. Missing optional shell hints and finders are warnings;
+invalid configuration or operational failures exit 2. `yuragi doctor --no-config`
+skips file loading so diagnostics remain available while repairing settings.
 
-`yuragi config path` prints the reserved configuration path. Resolution order
-is `YURAGI_CONFIG_FILE`, then `XDG_CONFIG_HOME/yuragi/config.toml`, then
-`HOME/.config/yuragi/config.toml`. Configuration values are not loaded in this
-release: Mojo 1.0 provides safe filesystem I/O but no TOML parser, and Yuragi
-does not claim compatibility through an incomplete hand-written subset.
+`yuragi config path` prints the path resolved from `YURAGI_CONFIG_FILE`, then
+absolute `XDG_CONFIG_HOME/yuragi/config.toml`, then
+`HOME/.config/yuragi/config.toml`. Missing files are optional. The flat TOML
+settings allowlist is `lang`, `case`, and `limit`:
+
+```toml
+lang = "ja"
+case = "smart"
+limit = 20
+```
+
+Each setting uses **CLI > environment > config > defaults**. Environment
+variables are `YURAGI_LANG`, `YURAGI_CASE`, and `YURAGI_LIMIT`; empty values mean
+unset. `--no-config` skips the file, and `--smart-case` explicitly restores smart
+case. Commands and preview execution are outside this surface. See
+[configuration](docs/configuration.md) for the exact supported TOML grammar,
+precedence, validation, and recovery workflow.
 
 ## Repository map
 

@@ -27,3 +27,33 @@ is optional and is not part of this release path.
 
 Never move a published tag or overwrite a channel artifact. A correction uses
 a new patch version.
+
+## Pull-request source-archive smoke
+
+Every PR and `main` push exercises the same `scripts/source-artifact.sh`
+creation/checksum/restoration implementation used by release source and package
+jobs. `scripts/test-source-artifact.py` verifies canonical contents, rejects a
+corrupt archive before extraction, protects an existing destination, and requires
+the upload/download/Pixi action pins in both workflows to match.
+
+The smoke jobs upload one archive, download it on all three supported native
+runners, verify/extract it into a fresh directory, install its locked Pixi
+environment, and run `pixi run --locked build` there. The compiled CLI then runs
+from a separate temporary working directory: direct filtering, NUL-framed
+round-trip, and no-match exit status are checked. An empty explicit config makes
+the check independent of user settings. The source archive cannot depend on a
+checkout's `.git` or an existing build directory. The PR workflow has only
+`contents: read` and contains no publishing job.
+
+Local handoff checks:
+
+```sh
+python3 scripts/test-source-artifact.py
+bash scripts/source-artifact.sh create HEAD yuragi-smoke /tmp/yuragi-archives
+bash scripts/source-artifact.sh restore yuragi-smoke /tmp/yuragi-archives /tmp/yuragi-source
+cd /tmp/yuragi-source
+pixi run --locked build
+pixi run --locked bash scripts/check-source-artifact.sh
+```
+
+Choose fresh temporary paths; restore refuses an existing destination.

@@ -1,0 +1,68 @@
+name: Source artifact smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    name: Upload canonical source archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Test shared handoff and release pin parity
+        run: python3 scripts/test-source-artifact.py
+      - name: Create source archive and checksum
+        run: bash scripts/source-artifact.sh create HEAD yuragi-smoke "${RUNNER_TEMP}/source-artifact"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: source-archive-smoke
+          path: |
+            ${{ runner.temp }}/source-artifact/yuragi-smoke.tar.gz
+            ${{ runner.temp }}/source-artifact/yuragi-smoke.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 1
+
+  restore:
+    name: Restore source archive on ${{ matrix.name }}
+    needs: archive
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86-64
+            os: ubuntu-24.04
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+          - name: macOS ARM64
+            os: macos-14
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: source-archive-smoke
+          path: ${{ runner.temp }}/archive
+      - name: Verify and extract canonical source
+        shell: bash
+        run: bash scripts/source-artifact.sh restore yuragi-smoke "${RUNNER_TEMP}/archive" "${RUNNER_TEMP}/source"
+      - uses: prefix-dev/setup-pixi@d3f436a425481402e6a95a1d1fc10331c708cd9e # v0.10.2
+        with:
+          pixi-version: v0.76.2
+          cache: true
+          working-directory: ${{ runner.temp }}/source
+      - name: Build extracted source and smoke-test CLI
+        working-directory: ${{ runner.temp }}/source
+        run: |
+          pixi run --locked build
+          pixi run --locked bash scripts/check-source-artifact.sh

@@ -5,6 +5,7 @@ from mojotui import (
     Selection,
     SelectionSet,
     text_width,
+    Subscription,
 )
 from std.collections import List
 from std.testing import TestSuite, assert_equal, assert_false, assert_true
@@ -14,8 +15,13 @@ from yuragi.interactive import (
     FinderOutcome,
     FinderSession,
     _FinderApplication,
+    _FinderAdapter,
+    _SearchTick,
     _FinderModel,
     _counter_text,
+    _advance_search,
+    _toggle_cursor_mark,
+    _resolved_selection,
     _display_text,
     _handle_key,
     _is_marked,
@@ -546,8 +552,8 @@ def test_multi_enter_returns_reverse_marks_in_source_order() raises:
     assert_false(_handle_key(session._model, KeyEvent.named(KeyEvent.UP)))
     assert_false(_handle_key(session._model, KeyEvent.named(KeyEvent.TAB)))
 
-    assert_equal(session._model.marked_source_indices[0], 2)
-    assert_equal(session._model.marked_source_indices[1], 0)
+    assert_equal(session._model.marked_source_indices[2], 0)
+    assert_equal(session._model.marked_source_indices[0], 1)
     assert_true(_handle_key(session._model, KeyEvent.named(KeyEvent.ENTER)))
     var selected = session.selection()
     assert_equal(len(selected), 2)
@@ -674,6 +680,113 @@ def test_visible_window_materializes_only_rows_around_cursor() raises:
     var empty_window = _visible_window(model, 0)
     assert_equal(empty_window[0], 0)
     assert_equal(empty_window[1], 0)
+
+
+def test_cooperative_query_generations_discard_stale_ticks_and_restore_selection() raises:
+    var candidates = List[Candidate]()
+    for index in range(1000):
+        candidates.append(Candidate(index, String("北京 カメラ 카메라 ", index)))
+    var model = _model(candidates^)
+    model.cursor.select(UInt(321), 1000)
+    model.selected_source_index = 321
+    assert_false(_handle_key(model, KeyEvent.character("カ")))
+    assert_true(Bool(model.search))
+    assert_true(_counter_text(model).find("searching") >= 0)
+    var stale = model.query_generation
+    assert_false(_handle_key(model, KeyEvent.character("メ")))
+    assert_equal(model.query_generation, stale + 1)
+    var scanned = model.search.value().scanned
+    _advance_search(model, stale)
+    assert_equal(model.search.value().scanned, scanned)
+    assert_false(_handle_key(model, KeyEvent.named(KeyEvent.ENTER)))
+    while model.search:
+        _advance_search(model, model.query_generation)
+    assert_equal(_match_count(model), 1000)
+    assert_equal(model.index.last_scored_pair_count(), 1000)
+    assert_equal(model.index.last_position_reconstruction_count(), 1000)
+    assert_equal(_row_count(model), 1000)
+    assert_equal(_selected_id(model).value(), 321)
+    for row in range(1000):
+        assert_equal(model.matches[row].source_index, row)
+    assert_false(_handle_key(model, KeyEvent.character("不存在")))
+    assert_true(Bool(model.search))
+    assert_true(_handle_key(model, KeyEvent.character("c", KeyEvent.CONTROL)))
+    assert_true(model.outcome == FinderOutcome.ABORTED)
+
+
+def test_sparse_and_all_marks_keep_duplicate_identities_after_queries() raises:
+    var candidates = List[Candidate]()
+    for index in range(1000):
+        candidates.append(Candidate(index * 2, String("duplicate")))
+    var model = _multi_model(candidates^)
+    for index in range(1000):
+        model.selected_source_index = index * 2
+        _toggle_cursor_mark(model)
+    assert_equal(_marked_count(model), 1000)
+    model.outcome = FinderOutcome.ACCEPTED
+    var all_selected = _resolved_selection(model)
+    assert_equal(len(all_selected), 1000)
+    for index in range(1000):
+        assert_equal(all_selected[index].source_index, index * 2)
+    model.outcome = FinderOutcome.ABORTED
+    for index in range(1, 1000, 2):
+        model.selected_source_index = index * 2
+        _toggle_cursor_mark(model)
+    assert_equal(_marked_count(model), 500)
+    assert_false(_handle_key(model, KeyEvent.character("dup")))
+    while model.search:
+        _advance_search(model, model.query_generation)
+    assert_true(_handle_key(model, KeyEvent.named(KeyEvent.ENTER)))
+    var session = FinderSession(List[Candidate](), Options())
+    swap(session._model, model)
+    var selected = session.selection()
+    assert_equal(len(selected), 500)
+    for index in range(len(selected)):
+        assert_equal(selected[index].source_index, index * 4)
+        assert_equal(selected[index].text, "duplicate")
+
+
+def test_search_deadline_exists_only_for_an_active_generation() raises:
+    var adapter = _FinderAdapter()
+    assert_false(Bool(adapter.next_deadline_ns()))
+    adapter.start(Subscription(String("search"), _SearchTick(1), revision=1))
+    var deadline = adapter.next_deadline_ns().value()
+    adapter.on_deadline(deadline - 1)
+    assert_equal(len(adapter.take_messages()), 0)
+    adapter.on_deadline(deadline)
+    assert_false(Bool(adapter.next_deadline_ns()))
+    var messages = adapter.take_messages()
+    assert_equal(len(messages), 1)
+    assert_equal(messages[0][_SearchTick].generation, 1)
+    adapter.stop("search")
+    assert_false(Bool(adapter.next_deadline_ns()))
+    adapter.on_deadline(deadline + 1_000_000)
+    assert_equal(len(adapter.take_messages()), 0)
+    adapter.start(Subscription(String("search"), _SearchTick(2), revision=2))
+    adapter.close()
+    assert_false(Bool(adapter.next_deadline_ns()))
+
+
+def test_seeded_empty_results_are_not_ranked_twice_at_the_deferral_boundary() raises:
+    var options = Options()
+    options.query = String("absent")
+    for count in range(64, 66):
+        var candidates = List[Candidate]()
+        for index in range(count):
+            candidates.append(Candidate(index, String("北京")))
+        var session = FinderSession(candidates^, options)
+        if count == 64:
+            assert_equal(session._model.query_generation, 0)
+            assert_false(Bool(session._model.search))
+            assert_false(session._model.index.last_search_was_incremental())
+            assert_equal(session._model.index.last_scanned_count(), 64)
+        else:
+            assert_equal(session._model.query_generation, 1)
+            assert_true(Bool(session._model.search))
+            while session._model.search:
+                _advance_search(session._model, session._model.query_generation)
+            assert_equal(session._model.index.last_scanned_count(), 65)
+        assert_equal(_match_count(session._model), 0)
 
 
 def main() raises:

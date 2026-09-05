@@ -37,6 +37,9 @@ struct Options(Copyable):
     var query: String
     var language: String
     var limit: Int
+    var max_input_bytes: Int
+    var max_candidates: Int
+    var max_record_bytes: Int
     var case_mode: CaseMode
     var read0: Bool
     var print0: Bool
@@ -44,6 +47,7 @@ struct Options(Copyable):
     var select_1: Bool
     var exit_0: Bool
     var multi: Bool
+    var no_config: Bool
     var help_requested: Bool
     var version_requested: Bool
     var command: CommandKind
@@ -58,6 +62,9 @@ struct Options(Copyable):
         self.query = String()
         self.language = String("auto")
         self.limit = 0
+        self.max_input_bytes = 268_435_456
+        self.max_candidates = 1_000_000
+        self.max_record_bytes = 1_048_576
         self.case_mode = CaseMode.SMART_ASCII
         self.read0 = False
         self.print0 = False
@@ -65,6 +72,7 @@ struct Options(Copyable):
         self.select_1 = False
         self.exit_0 = False
         self.multi = False
+        self.no_config = False
         self.help_requested = False
         self.version_requested = False
         self.command = CommandKind.FIND
@@ -76,8 +84,16 @@ def _parse_subcommand(args: List[String], mut options: Options) raises -> Bool:
         return False
     var command = args[1]
     if command == "doctor":
-        if len(args) != 2:
-            raise Error("doctor accepts no arguments; got: ", args[2])
+        var next_argument = 2
+        if len(args) > 2 and args[2] == "--no-config":
+            options.no_config = True
+            next_argument = 3
+        if len(args) > next_argument:
+            raise Error(
+                "doctor accepts only optional --no-config; unexpected argument: ",
+                args[next_argument],
+                "; use yuragi doctor [--no-config]",
+            )
         options.command = CommandKind.DOCTOR
         return True
     if command == "shell":
@@ -231,6 +247,10 @@ def parse_options(args: List[String]) raises -> Options:
         var argument = String(args[index])
         if argument == "--help" or argument == "-h":
             options.help_requested = True
+        elif argument == "--no-config":
+            options.no_config = True
+        elif argument == "--smart-case":
+            _set_case_mode(options, CaseMode.SMART_ASCII)
         elif argument == "--version":
             options.version_requested = True
         elif argument == "--filter" or argument == "-f":
@@ -258,6 +278,49 @@ def parse_options(args: List[String]) raises -> Options:
             _set_limit(options, args[index])
         elif argument.startswith("--limit="):
             _set_limit(options, argument.removeprefix("--limit="))
+        elif (
+            argument.startswith("--max-input-bytes")
+            or argument.startswith("--max-candidates")
+            or argument.startswith("--max-record-bytes")
+        ):
+            var fields = argument.split("=", maxsplit=1)
+            var flag = String(fields[0])
+            if (
+                flag != "--max-input-bytes"
+                and flag != "--max-candidates"
+                and flag != "--max-record-bytes"
+            ):
+                raise Error("unknown argument '", argument, "' (try 'yuragi --help')")
+            var value: String
+            if len(fields) == 2:
+                value = String(fields[1])
+            else:
+                if index + 1 >= len(args):
+                    raise Error(flag, " requires a positive integer; use ", flag, " N")
+                index += 1
+                value = String(args[index])
+            var amount: Int
+            try:
+                amount = Int(value)
+            except:
+                raise Error(
+                    flag,
+                    " value '",
+                    value,
+                    "' must be a positive integer within range; use ",
+                    flag,
+                    " N",
+                )
+            if amount < 1:
+                raise Error(
+                    flag, " value '", value, "' must be >= 1; increase the limit"
+                )
+            if flag == "--max-input-bytes":
+                options.max_input_bytes = amount
+            elif flag == "--max-candidates":
+                options.max_candidates = amount
+            else:
+                options.max_record_bytes = amount
         elif argument == "--lang":
             if index + 1 >= len(args):
                 raise Error("--lang requires a language")
@@ -291,54 +354,50 @@ def parse_options(args: List[String]) raises -> Options:
 def usage() -> String:
     """Return the current, deliberately narrow command-line contract."""
     return String(
-        "Usage: yuragi [--filter QUERY | --query QUERY] [--limit N]\n"
-        "              [--lang auto|zh|ja|ko] [options]\n"
-        "       yuragi doctor\n"
-        "       yuragi shell bash|zsh|fish|powershell\n"
-        "       yuragi config path\n"
-        "\n"
-        "Read newline-delimited candidates from standard input and write selected\n"
-        "candidates to standard output. Without --filter, open an inline picker;\n"
-        "filter and interactive modes share one prepared search index. auto keeps\n"
-        "direct matching; ja, zh, and ko opt into bounded Yomi phonetic keys.\n"
-        "Smart case is the default: a query containing an ASCII uppercase letter\n"
-        "matches case-sensitively.\n"
-        "\n"
-        "Options:\n"
-        "  -f, --filter QUERY    filter candidates noninteractively for QUERY\n"
-        "  -q, --query STR       seed the interactive prompt with STR\n"
-        "  -1, --select-1        accept a sole initial match without the picker\n"
-        "  -0, --exit-0          exit 1 on no initial matches without the picker\n"
-        "  -m, --multi           select multiple candidates with TAB/Shift-TAB\n"
-        "      --limit N         emit at most N best-ranked candidates\n"
-        "      --lang LANGUAGE   auto (direct), ja, zh, or ko (default: auto)\n"
-        "  -i, --ignore-case     match case-insensitively (ASCII)\n"
-        "  +i, --no-ignore-case  match case-sensitively\n"
-        "      --read0           read NUL-delimited candidates from standard input\n"
-        "      --print0          write NUL-delimited candidates to standard output\n"
-        "      --explain         print rank, score, key kind, and match positions\n"
-        "  -h, --help            show this help\n"
-        "      --version         show the version\n"
-        "\n"
-        "Commands:\n"
-        "  doctor                report environment and workflow dependencies\n"
-        "  shell SHELL           print Ctrl-T, Ctrl-R, Alt-C, and ** integration\n"
-        "  config path           print the reserved config path (loading disabled)\n"
-        "\n"
-        "Interactive flag matrix: --query seeds the prompt; --select-1\n"
-        "auto-accepts and prints a sole initial match; --exit-0 exits 1\n"
-        "immediately when the initial match set is empty; --multi enables\n"
-        "marking multiple candidates. With --query, both automation flags\n"
-        "evaluate the seeded query. All four flags are interactive-mode-only\n"
-        "and are usage errors with --filter.\n"
-        "Keybindings: Enter accepts; TAB marks and moves down; Shift-TAB marks\n"
-        "and moves up in --multi mode. Both are inert without --multi.\n"
-        "Left/Right/Home/End move the query cursor; Backspace/Delete edit.\n"
-        "Ctrl-U clears; Ctrl-W deletes the previous word; Ctrl-Z/Y undo/redo.\n"
-        "\n"
-        "Invalid options exit before informational modes. If both --help and\n"
-        "--version are validly supplied, --help wins.\n"
-        "Exit codes: 0 = success, 1 = no match, 2 = error, 130 = interactive abort.\n"
+        "Usage: yuragi [--filter QUERY | --query QUERY] [--limit N]\n             "
+        " [--lang auto|zh|ja|ko] [options]\n       yuragi doctor [--no-config]\n      "
+        " yuragi shell bash|zsh|fish|powershell\n       yuragi config path\n\nRead"
+        " newline-delimited candidates from standard input and write"
+        " selected\ncandidates to standard output. Without --filter, open an inline"
+        " picker;\nfilter and interactive modes share one prepared search index. auto"
+        " keeps\ndirect matching; ja, zh, and ko opt into bounded Yomi phonetic"
+        " keys.\nSmart case is the default: a query containing an ASCII uppercase"
+        " letter\nmatches case-sensitively.\n\nOptions:\n  -f, --filter QUERY          "
+        " filter candidates noninteractively for QUERY\n  -q, --query STR             "
+        " seed the interactive prompt with STR\n  -1, --select-1               accept a"
+        " sole initial match without the picker\n  -0, --exit-0                 exit 1"
+        " on no initial matches without the picker\n  -m, --multi                 "
+        " select multiple candidates with TAB/Shift-TAB\n      --limit N               "
+        " emit at most N best-ranked candidates\n      --lang LANGUAGE          auto"
+        " (direct), ja, zh, or ko (default: auto)\n  -i, --ignore-case            match"
+        " case-insensitively (ASCII)\n  +i, --no-ignore-case         match"
+        " case-sensitively\n      --smart-case             restore ASCII smart case"
+        " explicitly\n      --no-config              skip config file loading"
+        " (environment still applies)\n      --read0                  read"
+        " NUL-delimited candidates from standard input\n      --print0                "
+        " write NUL-delimited candidates to standard output\n      --max-input-bytes N "
+        "     cap raw input bytes (default: 268435456)\n      --max-candidates N      "
+        " cap input records (default: 1000000)\n      --max-record-bytes N     cap raw"
+        " bytes per record (default: 1048576)\n      --explain                print"
+        " rank, score, key kind, and match positions\n  -h, --help                  "
+        " show this help\n      --version                show the"
+        " version\n\nCommands:\n  doctor                report environment and workflow"
+        " dependencies\n  shell SHELL           print Ctrl-T, Ctrl-R, Alt-C, and **"
+        " integration\n  config path           print the resolved config"
+        " path\n\nInteractive flag matrix: --query seeds the prompt;"
+        " --select-1\nauto-accepts and prints a sole initial match; --exit-0 exits"
+        " 1\nimmediately when the initial match set is empty; --multi enables\nmarking"
+        " multiple candidates. With --query, both automation flags\nevaluate the seeded"
+        " query. All four flags are interactive-mode-only\nand are usage errors with"
+        " --filter.\nKeybindings: Enter accepts; TAB marks and moves down; Shift-TAB"
+        " marks\nand moves up in --multi mode. Both are inert without"
+        " --multi.\nLeft/Right/Home/End move the query cursor; Backspace/Delete"
+        " edit.\nCtrl-U clears; Ctrl-W deletes the previous word; Ctrl-Z/Y"
+        " undo/redo.\n\nSettings: CLI > YURAGI_LANG/YURAGI_CASE/YURAGI_LIMIT > config >"
+        " defaults.\nConfig supports lang, case, and limit; run config path for its"
+        " location.\nInvalid options exit before informational modes. If both --help"
+        " and\n--version are validly supplied, --help wins.\nExit codes: 0 = success, 1"
+        " = no match, 2 = error, 130 = interactive abort.\n"
     )
 
 

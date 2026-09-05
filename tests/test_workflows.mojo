@@ -48,7 +48,7 @@ def test_doctor_report_is_exact_and_warnings_are_in_band() raises:
     assert_equal(
         doctor_report(
             resolved_config_path="/cfg/yuragi/config.toml",
-            config_exists=False,
+            config_status="absent; environment and defaults apply",
             shell="",
             finder="",
         ),
@@ -57,7 +57,7 @@ def test_doctor_report_is_exact_and_warnings_are_in_band() raises:
             "ok version: 0.1.0\n"
             "ok executable: running\n"
             "info config path: /cfg/yuragi/config.toml\n"
-            "info config file: absent; loading is not enabled in this release\n"
+            "info config file: absent; environment and defaults apply\n"
             "warn shell hint: SHELL is not set\n"
             "warn path finder: fd, fdfind, and find were not found on PATH\n"
             "info shell scripts: dependencies are checked when each binding runs\n"

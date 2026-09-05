@@ -3,7 +3,7 @@
 from std.os.env import getenv
 from std.pathlib import Path
 
-from yuragi.config import config_path
+from yuragi.config import config_path, load_config_file
 from yuragi.options import VERSION
 
 
@@ -47,7 +47,7 @@ def finder_from_path(path: StringSlice) -> String:
 def doctor_report(
     *,
     resolved_config_path: String,
-    config_exists: Bool,
+    config_status: String,
     shell: String,
     finder: String,
 ) -> String:
@@ -56,10 +56,7 @@ def doctor_report(
     output += "ok version: " + VERSION + "\n"
     output += "ok executable: running\n"
     output += "info config path: " + resolved_config_path + "\n"
-    if config_exists:
-        output += "info config file: present; loading is not enabled in this release\n"
-    else:
-        output += "info config file: absent; loading is not enabled in this release\n"
+    output += "info config file: " + config_status + "\n"
     if shell != "":
         output += "ok shell hint: " + shell + "\n"
     else:
@@ -72,12 +69,24 @@ def doctor_report(
     return output^
 
 
-def detect_doctor_report() raises -> String:
-    """Inspect the environment using safe standard-library filesystem APIs."""
-    var resolved_config_path = config_path()
+def detect_doctor_report(*, no_config: Bool = False) raises -> String:
+    """Inspect and validate the same file the finder loads, without changing it."""
+    var resolved_config_path = String("<disabled>")
+    var config_status = String(
+        "disabled by --no-config; environment settings still apply"
+    )
+    if not no_config:
+        resolved_config_path = config_path()
+        var config = load_config_file(resolved_config_path)
+        if config:
+            config_status = (
+                "loaded and validated; CLI > environment > config > defaults"
+            )
+        else:
+            config_status = "absent; environment and defaults apply"
     return doctor_report(
         resolved_config_path=resolved_config_path,
-        config_exists=Path(resolved_config_path).exists(),
+        config_status=config_status,
         shell=getenv("SHELL"),
         finder=finder_from_path(getenv("PATH")),
     )

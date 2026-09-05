@@ -44,7 +44,7 @@ from mojotui import (
     render_line,
     text_input_action,
 )
-from std.collections import List as MojoList, Optional, Span as StdSpan
+from std.collections import Dict, List as MojoList, Optional, Span as StdSpan
 from std.ffi import c_int, c_ulong, external_call
 from std.io import FileDescriptor
 from std.utils import Variant
@@ -53,7 +53,7 @@ from yuragi.candidate import Candidate
 from yuragi.options import Options
 from yuragi.pipeline import initial_automation_indexed, language_mode
 from yuragi.ranking import RankedCandidate
-from yuragi.search_index import SearchIndex
+from yuragi.search_index import CooperativeSearch, SearchIndex
 
 
 comptime _VIEWPORT_HEIGHT = 12
@@ -74,7 +74,14 @@ struct FinderOutcome(Copyable, Equatable, ImplicitlyCopyable):
         return self._value == other._value
 
 
-comptime FinderMessage = Variant[KeyEvent, EditorCommand]
+struct _SearchTick(Copyable):
+    var generation: Int
+
+    def __init__(out self, generation: Int):
+        self.generation = generation
+
+
+comptime FinderMessage = Variant[KeyEvent, EditorCommand, _SearchTick]
 
 
 struct _FinderModel(Movable):
@@ -93,8 +100,13 @@ struct _FinderModel(Movable):
     var total_matches: Int
     var cursor: ListState
     var selected_source_index: Optional[Int]
-    var marked_source_indices: MojoList[Int]
+    var marked_source_indices: Dict[Int, Int]
+    var next_mark_order: Int
     var outcome: FinderOutcome
+    var query_generation: Int
+    var search_revision: Int
+    var search: Optional[CooperativeSearch]
+    var previous_row: Int
 
     def __init__(
         out self,
@@ -119,8 +131,13 @@ struct _FinderModel(Movable):
         self.identity_mode = options.query == ""
         self.cursor = ListState()
         self.selected_source_index = None
-        self.marked_source_indices = MojoList[Int]()
+        self.marked_source_indices = Dict[Int, Int]()
+        self.next_mark_order = 0
         self.outcome = FinderOutcome.ABORTED
+        self.query_generation = 0
+        self.search_revision = 0
+        self.search = None
+        self.previous_row = 0
         if self.identity_mode:
             self.matches = MojoList[RankedCandidate]()
             self.total_matches = len(self.index)
@@ -133,6 +150,15 @@ struct _FinderModel(Movable):
                 self.selected_source_index = matches[0].source_index
             self.matches = matches^
             self.total_matches = total_matches
+            if (
+                len(self.matches) == 0
+                and len(self.index) > 64
+                and not options.select_1
+                and not options.exit_0
+            ):
+                # Only the large-corpus pre-picker path intentionally defers
+                # ranking. An exact empty small-corpus result is already final.
+                _rerank(self)
 
 
 def _query_text(model: _FinderModel) -> String:
@@ -150,6 +176,8 @@ def _total_count(model: _FinderModel) -> Int:
 
 def _row_count(model: _FinderModel) -> Int:
     """Return visible logical rows without materializing identity candidates."""
+    if model.search:
+        return 0
     if not model.identity_mode:
         return len(model.matches)
     if model.has_limit:
@@ -171,71 +199,37 @@ def _marked_count(model: _FinderModel) -> Int:
     return len(model.marked_source_indices)
 
 
-def _contains_source_index(source_indices: MojoList[Int], source_index: Int) -> Bool:
-    for index in range(len(source_indices)):
-        if source_indices[index] == source_index:
-            return True
-    return False
-
-
 def _is_marked(model: _FinderModel, source_index: Int) -> Bool:
-    return _contains_source_index(model.marked_source_indices, source_index)
+    return source_index in model.marked_source_indices
 
 
-def _toggled_mark_order(
-    source_indices: MojoList[Int], source_index: Int
-) -> MojoList[Int]:
-    """Return candidate IDs in mark order after toggling one candidate ID."""
-    var toggled = source_indices.copy()
-    for index in range(len(toggled)):
-        if toggled[index] == source_index:
-            _ = toggled.pop(index)
-            return toggled^
-    toggled.append(source_index)
-    return toggled^
-
-
-def _toggle_cursor_mark(mut model: _FinderModel):
+def _toggle_cursor_mark(mut model: _FinderModel) raises:
+    """Toggle membership in expected O(1), retaining an insertion ordinal."""
     if not model.selected_source_index:
         return
     var selected = model.selected_source_index.value()
-    if (
-        not _is_marked(model, selected)
-        and model.has_limit
-        and len(model.marked_source_indices) >= model.limit
-    ):
+    if selected in model.marked_source_indices:
+        _ = model.marked_source_indices.pop(selected)
         return
-    model.marked_source_indices = _toggled_mark_order(
-        model.marked_source_indices,
-        selected,
-    )
-
-
-def _accepted_source_indices(model: _FinderModel) -> MojoList[Int]:
-    """Resolve accepted candidate IDs while retaining mark order internally."""
-    if model.multi and len(model.marked_source_indices) > 0:
-        return model.marked_source_indices.copy()
-    var accepted = MojoList[Int]()
-    if model.selected_source_index:
-        accepted.append(model.selected_source_index.value())
-    return accepted^
+    if model.has_limit and len(model.marked_source_indices) >= model.limit:
+        return
+    model.marked_source_indices[selected] = model.next_mark_order
+    model.next_mark_order += 1
 
 
 def _resolved_selection(model: _FinderModel) -> MojoList[Candidate]:
-    """Resolve accepted IDs to copied candidates in ascending source order."""
+    """Resolve marks in one corpus-order pass without sorting or nested scans."""
     var selected = MojoList[Candidate]()
     if model.outcome != FinderOutcome.ACCEPTED:
         return selected^
-
-    var remaining = _accepted_source_indices(model)
-    while len(remaining) > 0:
-        var earliest = 0
-        for index in range(1, len(remaining)):
-            if remaining[index] < remaining[earliest]:
-                earliest = index
-        var accepted_id = remaining.pop(earliest)
-        for candidate_index in range(len(model.index)):
-            if model.index.source_index_at(candidate_index) == accepted_id:
+    var use_marks = model.multi and len(model.marked_source_indices) > 0
+    for candidate_index in range(len(model.index)):
+        var candidate_id = model.index.source_index_at(candidate_index)
+        if use_marks:
+            if _is_marked(model, candidate_id):
+                selected.append(model.index.copy_candidate_at(candidate_index))
+        elif model.selected_source_index:
+            if candidate_id == model.selected_source_index.value():
                 selected.append(model.index.copy_candidate_at(candidate_index))
                 break
     return selected^
@@ -249,42 +243,70 @@ def _adopt_cursor_id(mut model: _FinderModel):
     model.selected_source_index = _row_source_index(model, row)
 
 
-def _rerank(mut model: _FinderModel) raises:
-    var previous_row = 0
-    if model.cursor.selected:
-        previous_row = Int(model.cursor.selected.value())
-    var previous_id = model.selected_source_index.copy()
-
-    var k = model.limit if model.has_limit else len(model.index)
-    var query = _query_text(model)
-    if query == "":
-        # One retained row is enough to update the index's complete identity
-        # match set; the model resolves all logical rows lazily from the index.
-        var page = model.index.search(query, model.case_mode, 1)
-        model.total_matches = page.total_matches
-        model.matches.clear()
-        model.identity_mode = True
+def _advance_search(mut model: _FinderModel, generation: Int) raises:
+    """Advance only the current generation; stale queued ticks are inert."""
+    if generation != model.query_generation or not model.search:
+        return
+    ref search = model.search.value()
+    if search.generation != generation:
+        return
+    search.advance(model.index)
+    model.search_revision += 1
+    if not search.done():
+        return
+    var completed = model.search.take()
+    var restored_row = completed.selected_row.copy()
+    model.total_matches = completed.total_matches
+    model.matches = completed^.take_rows()
+    model.identity_mode = False
+    var count = _row_count(model)
+    if count == 0:
+        model.cursor.select(None, 0)
+        model.selected_source_index = None
     else:
-        var page = model.index.search(query, model.case_mode, k)
-        model.total_matches = page.total_matches
-        model.matches = page^.take_rows()
-        model.identity_mode = False
+        var row = min(model.previous_row, count - 1)
+        if restored_row:
+            row = restored_row.value()
+        model.cursor.select(UInt(row), count)
+        _adopt_cursor_id(model)
 
+
+def _rerank(mut model: _FinderModel) raises:
+    if model.cursor.selected:
+        model.previous_row = Int(model.cursor.selected.value())
+    model.query_generation += 1
+    var query = _query_text(model)
+    if query != "":
+        var k = model.limit if model.has_limit else max(len(model.index), 1)
+        model.search = CooperativeSearch(
+            model.index,
+            query,
+            model.case_mode,
+            k,
+            model.query_generation,
+            model.selected_source_index,
+        )
+        # Finish tiny corpora immediately; large queries yield after one batch.
+        _advance_search(model, model.query_generation)
+        return
+
+    model.search = None
+    model.total_matches = len(model.index)
+    model.matches.clear()
+    model.identity_mode = True
     var row_count = _row_count(model)
     if row_count == 0:
         model.cursor.select(None, 0)
         model.selected_source_index = None
         return
-
-    if previous_id:
+    # Identity restoration uses the source order. This scan is cheap (IDs only),
+    # and preserves noncontiguous caller-supplied identities.
+    if model.selected_source_index:
         for row in range(row_count):
-            if _row_source_index(model, row) == previous_id.value():
+            if _row_source_index(model, row) == model.selected_source_index.value():
                 model.cursor.select(UInt(row), row_count)
-                model.selected_source_index = previous_id.value()
                 return
-
-    var nearest_row = min(previous_row, row_count - 1)
-    model.cursor.select(UInt(nearest_row), row_count)
+    model.cursor.select(UInt(min(model.previous_row, row_count - 1)), row_count)
     _adopt_cursor_id(model)
 
 
@@ -424,10 +446,18 @@ def _handle_key(mut model: _FinderModel, key: KeyEvent) raises -> Bool:
         model.outcome = FinderOutcome.ABORTED
         return True
     if key.code == KeyEvent.ENTER:
-        if not model.selected_source_index:
+        if model.search or not model.selected_source_index:
             return False
         model.outcome = FinderOutcome.ACCEPTED
         return True
+    if model.search and (
+        key.code == KeyEvent.TAB
+        or key.code == KeyEvent.DOWN
+        or key.code == KeyEvent.UP
+        or _control_character(key, "n")
+        or _control_character(key, "p")
+    ):
+        return False
     if (
         key.code == KeyEvent.TAB
         and model.multi
@@ -612,7 +642,7 @@ def _counter_text(model: _FinderModel, shown: Int = -1) -> String:
         "lang=",
         model.language_label,
         " matches=",
-        _match_count(model),
+        "?" if model.search else String(_match_count(model)),
         "/",
         _total_count(model),
         " retained=",
@@ -621,13 +651,14 @@ def _counter_text(model: _FinderModel, shown: Int = -1) -> String:
         visible,
         " marks=",
         _marked_count(model),
+        " searching" if model.search else "",
     )
 
 
 struct _FinderApplication(Application):
     comptime Model = _FinderModel
     comptime Message = FinderMessage
-    comptime Effect = Bool
+    comptime Effect = _SearchTick
 
     var initial_model: Optional[_FinderModel]
 
@@ -640,6 +671,9 @@ struct _FinderApplication(Application):
     def update(
         mut self, mut model: Self.Model, var message: Self.Message
     ) raises -> UpdateResult[Self.Effect]:
+        if message.isa[_SearchTick]():
+            _advance_search(model, message[_SearchTick].generation)
+            return UpdateResult[Self.Effect].redraw_only()
         if message.isa[EditorCommand]():
             var handled = _apply_editor_command(model, message[EditorCommand])
             return (
@@ -682,7 +716,9 @@ struct _FinderApplication(Application):
         )
         if _row_count(model) == 0:
             render_line(
-                Line.from_text("No matches — edit the query or Ctrl-U to reset"),
+                Line.from_text(
+                    "Searching — type to refine; Esc/Ctrl-C to quit" if model.search else "No matches — edit the query or Ctrl-U to reset"
+                ),
                 regions[3],
                 buffer,
             )
@@ -704,12 +740,33 @@ struct _FinderApplication(Application):
             return FinderMessage(event[KeyEvent].copy())
         return None
 
+    def subscriptions(
+        self, model: Self.Model
+    ) raises -> MojoList[Subscription[Self.Effect]]:
+        if model.search:
+            return [
+                Subscription(
+                    String("search"),
+                    _SearchTick(model.query_generation),
+                    revision=model.search_revision,
+                )
+            ]
+        return []
+
 
 struct _FinderAdapter(RuntimeAdapter):
+    """Schedule search turns through public deadlines, sleeping fully when idle."""
+
     comptime ApplicationType = _FinderApplication
 
+    var generation: Optional[Int]
+    var deadline: Optional[Int]
+    var messages: MojoList[FinderMessage]
+
     def __init__(out self):
-        pass
+        self.generation = None
+        self.deadline = None
+        self.messages = MojoList[FinderMessage]()
 
     def execute(mut self, var command: Command[Self.ApplicationType.Effect]) raises:
         pass
@@ -717,19 +774,41 @@ struct _FinderAdapter(RuntimeAdapter):
     def start(
         mut self, var subscription: Subscription[Self.ApplicationType.Effect]
     ) raises:
-        pass
+        self.generation = subscription.effect.generation
+        self.deadline = SystemClock().now_ns() + 1_000_000
 
     def stop(mut self, id: StringSlice) raises:
-        pass
+        self.generation = None
+        self.deadline = None
+        self.messages.clear()
+
+    def next_deadline_ns(self) -> Optional[Int]:
+        return self.deadline.copy()
+
+    def on_deadline(mut self, now_ns: Int) raises:
+        if not self.generation or not self.deadline:
+            return
+        if now_ns < self.deadline.value():
+            return
+        if len(self.messages) == 0:
+            self.messages.append(FinderMessage(_SearchTick(self.generation.value())))
+        # One outstanding turn at a time: after it is processed, the changed
+        # subscription revision arms the next deadline. Input cannot accumulate
+        # an unbounded queue of redundant timer messages.
+        self.deadline = None
 
     def take_messages(mut self) raises -> MojoList[Self.ApplicationType.Message]:
-        return []
+        var messages = MojoList[FinderMessage]()
+        swap(messages, self.messages)
+        return messages^
 
     def close(mut self) raises:
-        pass
+        self.close_silently()
 
     def close_silently(mut self):
-        pass
+        self.generation = None
+        self.deadline = None
+        self.messages.clear()
 
 
 def _open_controlling_terminal() raises -> Int:
@@ -869,6 +948,7 @@ struct FinderSession:
             options=SessionOptions(alternate_screen=False),
             input_descriptor=descriptor.value,
             output_descriptor=descriptor.value,
+            max_messages_per_step=1,
         )
         host.run()
         ref finished_model = host.application.runtime.model

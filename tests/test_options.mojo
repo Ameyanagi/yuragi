@@ -120,7 +120,9 @@ def test_exact_subcommand_shapes() raises:
 
 def test_rejects_malformed_subcommands() raises:
     var doctor_args: List[String] = ["yuragi", "doctor", "extra"]
-    with assert_raises(contains="doctor accepts no arguments; got: extra"):
+    with assert_raises(
+        contains="doctor accepts only optional --no-config; unexpected argument: extra"
+    ):
         _ = parse_options(doctor_args^)
 
     var missing_shell_args: List[String] = ["yuragi", "shell"]
@@ -143,16 +145,17 @@ def test_help_and_version_text() raises:
     assert_true(options.version_requested)
     assert_true(usage().startswith("Usage: yuragi [--filter QUERY | --query QUERY]"))
     assert_true(
-        "      --limit N         emit at most N best-ranked candidates" in usage()
-    )
-    assert_true(
-        "  -q, --query STR       seed the interactive prompt with STR" in usage()
-    )
-    assert_true(
-        "  -m, --multi           select multiple candidates with TAB/Shift-TAB"
+        "      --limit N                emit at most N best-ranked candidates"
         in usage()
     )
-    assert_true("  +i, --no-ignore-case  match case-sensitively" in usage())
+    assert_true(
+        "  -q, --query STR              seed the interactive prompt with STR" in usage()
+    )
+    assert_true(
+        "  -m, --multi                  select multiple candidates with TAB/Shift-TAB"
+        in usage()
+    )
+    assert_true("  +i, --no-ignore-case         match case-sensitively" in usage())
     assert_true(
         "Interactive flag matrix: --query seeds the prompt; --select-1" in usage()
     )
@@ -176,7 +179,8 @@ def test_explain_option_and_usage() raises:
     var options = parse_options(args^)
     assert_true(options.explain)
     assert_true(
-        "      --explain         print rank, score, key kind, and match positions"
+        "      --explain                print rank, score, key kind, and match"
+        " positions"
         in usage()
     )
 
@@ -341,6 +345,15 @@ def test_rejects_invalid_limits() raises:
     var overflow: List[String] = ["yuragi", "--limit=99999999999999999999"]
     with assert_raises(contains="exceeds the supported integer range"):
         _ = parse_options(overflow^)
+
+
+def test_doctor_reports_the_actual_unexpected_argument() raises:
+    var extra: List[String] = ["yuragi", "doctor", "--no-config", "EXTRA"]
+    with assert_raises(contains="unexpected argument: EXTRA"):
+        _ = parse_options(extra^)
+    var unsupported: List[String] = ["yuragi", "doctor", "--unknown", "EXTRA"]
+    with assert_raises(contains="unexpected argument: --unknown"):
+        _ = parse_options(unsupported^)
 
 
 def main() raises:
