@@ -38,8 +38,8 @@ jq -e \
               "mojo-compiler ==1.0.0",
               "mojo-hibana ==0.1.0",
               "mojo-moji ==0.1.0",
-              "mojo-mojotui ==0.1.1",
-              "mojo-yomi ==0.1.1"
+              "mojo-mojotui ==0.1.2",
+              "mojo-yomi ==0.1.2"
           ]' \
     <<<"$package_index" >/dev/null
 
